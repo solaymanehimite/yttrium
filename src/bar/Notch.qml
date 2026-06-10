@@ -28,13 +28,14 @@ PopupWindow {
                 leftMargin: 10
                 rightMargin: 10
             }
+            spacing: 15
 
             Clock {}
-            Item {
+            Item { // Spacer
                 Layout.fillWidth: true
-            } // Spacer
-            Volume {}
-            Display {}
+            }
+            Battery {}
+            Network {}
         }
     }
 }

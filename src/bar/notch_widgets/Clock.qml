@@ -1,18 +1,25 @@
 import QtQuick
-import QtQuick.Layouts
 import qs.src.services
 
 Row {
-    spacing: 10
+    spacing: 5
 
     Text {
+        // Google Sans is not Mono so we need to give the time text a fixed width to not keep resizing.
+        // To do this we create a dummy text with the maximum size the time text can be.
         anchors.verticalCenter: parent.verticalCenter
+        text: "MMMMMM"
+        color: "transparent"
 
-        text: Time.time
-        color: "white"
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: Time.time
+            color: "white"
 
-        font.pixelSize: 16
-        font.family: "Google Sans Flex"
+            font.pixelSize: 16
+            font.family: "Google Sans Flex"
+            font.weight: 500
+        }
     }
 
     Text {
