@@ -1,5 +1,4 @@
 pragma Singleton
-
 import Quickshell
 import Quickshell.Networking
 import QtQuick
@@ -7,32 +6,27 @@ import QtQuick
 Singleton {
     id: networkService
 
-    property list<NetworkDevice> devices: []
-    property NetworkDevice connectedDevice: null
-    property Network connectedNetwork: null
+    // Automatically tracks system device lists reactively
+    readonly property var devices: Networking.devices.values
 
-    signal checkedDevices
-
-    function checkDevices() {
-        networkService.devices = [];
-        networkService.devices = Networking.devices.values;
-
-        for (var i = 0; i < networkService.devices.length; i++) {
-            if (networkService.devices[i].connected) {
-                networkService.connectedDevice = networkService.devices[i];
-                networkService.connectedNetwork = networkService.devices[i].networks.values[0];
-                break;
-            }
+    // Automatically tracks connected device changes
+    readonly property NetworkDevice connectedDevice: {
+        const devList = devices;
+        for (let i = 0; i < devList.length; i++) {
+            if (devList[i].connected) return devList[i];
         }
+        return null;
     }
 
-    Timer {
-        interval: 5000
-        running: true
-        repeat: true
-        onTriggered: {
-            networkService.checkDevices();
-            networkService.checkedDevices();
+    // Automatically tracks connected Wi-Fi networks
+    readonly property Network connectedNetwork: {
+        const dev = connectedDevice;
+        if (dev && dev.type === DeviceType.Wifi) {
+            const nets = dev.networks.values;
+            for (let i = 0; i < nets.length; i++) {
+                if (nets[i].connected) return nets[i];
+            }
         }
+        return null;
     }
 }

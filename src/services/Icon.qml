@@ -4,6 +4,6 @@ import Quickshell
 Singleton {
 
     function getPath(name) {
-        return "file:///home/solaymanehimite/.config/quickshell/assets/icons/" + name + ".svg";
+        return "file://" + Quickshell.shellDir + "/assets/icons/" + name + ".svg";
     }
 }

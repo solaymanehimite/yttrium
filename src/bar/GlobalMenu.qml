@@ -1,28 +1,43 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
 import Quickshell.Wayland
 
 import qs.src.services
 
-RowLayout {
-    height: parent.height
-    spacing: 25
+Pane {
+    anchors.fill: parent
+    padding: 0
 
-    Image {
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: parent.left
-        sourceSize.width: 20
-        anchors.leftMargin: 10
-        source: Icon.getPath("logo")
-    }
+    leftPadding: 15
+    topPadding: 5
+    background: null
 
-    Text {
-        text: ToplevelManager.activeToplevel.title
-        elide: Text.ElideRight
-        Layout.maximumWidth: 150
-        color: "white"
-        font.family: "Google Sans Flex"
-        font.pointSize: 11
-        font.weight: 600
+    RowLayout {
+        id: globalMenu
+        height: parent.height
+        spacing: 20
+
+        property string windowTitle: {
+            if (ToplevelManager.activeToplevel) {
+                return ToplevelManager.activeToplevel.title;
+            }
+            return "";
+        }
+
+        Image {
+            sourceSize.width: 18
+            source: Icon.getPath("logo")
+        }
+
+        Text {
+            text: globalMenu.windowTitle
+            color: "white"
+            elide: Text.ElideRight
+
+            font.family: "Google Sans Flex"
+            font.pointSize: 11
+            font.weight: 600
+        }
     }
 }

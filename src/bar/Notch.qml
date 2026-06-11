@@ -9,8 +9,8 @@ PopupWindow {
     anchor.rect.x: bar.width / 2 - width / 2
     anchor.rect.y: bar.height / 2 - height / 2
 
-    width: 400
-    height: 30
+    implicitWidth: 400
+    implicitHeight: 30
 
     visible: true
     color: "transparent" // Use a Rect instead

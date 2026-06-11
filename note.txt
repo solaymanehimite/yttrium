@@ -1,0 +1,183 @@
+ ### 1. Overall Rating: 6.5 / 10
+
+  • Concept & Architecture (8/10): The project is modular, well-structured, and
+  leverages Quickshell's modern QtQuick/Wayland stack effectively. The
+  "pill/notch" aesthetic (similar to macOS's Dynamic Island) is highly engaging.
+  • Implementation (5/10): Many widgets (like Battery.qml) are currently
+  static stubs. The configuration also relies on system command polling and
+  hardcoded paths, which can be optimized.
+  ──────
+  ### 2. Refactoring & Performance Tips
+
+  #### A. Event-Driven Network Handling (No Polling)
+
+  In NetworkService.qml, you use a  Timer  to query system network interfaces
+every
+  5 seconds. Because Quickshell's quickshell-network.qmltypes service natively
+publishes
+  property updates, you can use declarative property bindings instead:
+
+    // src/services/NetworkService.qml
+    pragma Singleton
+    import Quickshell
+    import Quickshell.Networking
+    import QtQuick
+
+    Singleton {
+        id: networkService
+
+        // Automatically tracks system device lists reactively
+        readonly property var devices: Networking.devices.values
+
+        // Automatically tracks connected device changes
+        readonly property NetworkDevice connectedDevice: {
+            const devList = devices;
+            for (let i = 0; i < devList.length; i++) {
+                if (devList[i].connected) return devList[i];
+            }
+            return null;
+        }
+
+        // Automatically tracks connected Wi-Fi networks
+        readonly property Network connectedNetwork: {
+            const dev = connectedDevice;
+            if (dev && dev.type === DeviceType.Wifi) {
+                const nets = dev.networks.values;
+                for (let i = 0; i < nets.length; i++) {
+                    if (nets[i].connected) return nets[i];
+                }
+            }
+            return null;
+        }
+    }
+
+  This is fully reactive; when any device's  connected  state changes, QML
+  automatically re-evaluates the properties without requiring a timer.
+
+  #### B. Read Backlight Directly (Eliminate Process Spawning)
+
+  In Brightness.qml, you spawn  brightnessctl  in a  Process  when
+  /sys/class/backlight/...  changes. Spawning shell commands is CPU-heavy.
+  Since the files under  /sys/class/backlight  are world-readable, read their
+  text directly with quickshell-io.qmltypes:                                      
+
+    // src/services/Brightness.qml
+    pragma Singleton
+    import Quickshell
+    import Quickshell.Io
+    import QtQuick
+
+    Singleton {
+        id: brightnessService
+
+        FileView {
+            id: actualBrightnessFile
+            path: "/sys/class/backlight/intel_backlight/actual_brightness"
+            watchChanges: true
+        }
+
+        FileView {
+            id: maxBrightnessFile
+            path: "/sys/class/backlight/intel_backlight/max_brightness"
+        }
+
+        readonly property real maxBrightness: parseFloat(maxBrightnessFile.
+  text) || 1.0
+        readonly property real brightness: parseFloat(actualBrightnessFile.
+  text) / maxBrightness
+    }
+
+  Note: If you want to write changes (e.g., sliding a slider), you will still
+  need to execute a command like  brightnessctl set  because editing files in
+  /sys/class/  requires root permissions.
+
+  #### C. Remove Hardcoded Home Directory Paths
+
+  In Icon.qml, your file path  /home/solaymanehimite/...  is hardcoded.
+  Use  Quickshell.configDir  to make the path portable:
+
+    function getPath(name) {
+        return "file://" + Quickshell.configDir + "/assets/icons/" + name + ".
+  svg";
+    }
+
+  #### D. Fix Clashing Layout Anchors
+
+  In GlobalMenu.qml, you use  anchors.verticalCenter  and  anchors.left  inside
+  a  RowLayout . This clashing logic outputs QML layout warnings.
+
+  • Replace  anchors  with attached properties like  Layout.alignment: Qt.
+  AlignVCenter  and  Layout.leftMargin: 10 .
+  • Additionally, change  ToplevelManager.activeToplevel.title  to
+  ToplevelManager.activeToplevel?.title ?? ""  to prevent console crashes when
+  no windows are active.
+
+  #### E. Avoid Clock Wiggling Using Tabular Figures
+
+  In Clock.qml, you measure text width using a transparent  "MMMMMM"
+  helper to keep the clock layout static. You can get clean, monospaced digits
+  natively using OpenType features:
+
+    font.family: "Google Sans Flex"
+    font.features: { "tnum": 1 } // Enables Tabular (monospaced) Numbers
+  ──────
+  ### 3. Implementing a macOS-style Global Menu Bar
+
+  #### How the Protocol Works
+
+  On Linux desktops, macOS-like global menus are implemented using the AppMenu
+  protocol over D-Bus:
+
+  1. Registrar Service: A session D-Bus service (usually  com.canonical.AppMenu.
+  Registrar ) hosts a registry of open window IDs and their corresponding D-Bus
+  menu paths.
+  2. Exported Menus: Applications (Qt/GTK) act as D-Bus servers. They export
+  their file/edit menus as an XML tree on a D-Bus path (e.g.,
+  /com/canonical/dbusmenu ).
+  3. Consumer (Your Bar): Your panel detects which window has focus, asks the
+  registrar for that window's D-Bus menu destination, and renders it.
+
+  #### Limitations in Wayland
+
+  Unlike X11, Wayland compositors (like Hyprland) do not have a standardized
+  window ID system that links Wayland surfaces to D-Bus Registrar windows.
+
+  #### How to Implement it (Step-by-Step)
+
+  Because Quickshell's quickshell-dbusmenu.qmltypes type is  isCreatable: false ,
+it cannot
+  connect to arbitrary D-Bus endpoints purely from QML. The standard way to
+  resolve this is with a small Python or Rust helper script:
+
+  1. Write a Helper Script:
+      • Listen to active window events using the compositor socket (e.g.,
+      hyprctl activewindow  or Hyprland IPC socket).
+      • Query the D-Bus registrar  com.canonical.AppMenu.Registrar  (using
+      python  dbus-next  or similar) to fetch the menu bus name and object path
+      matching the active window's title or PID.
+      • Query the target application's D-Bus menu layout and serialize it into
+      simple JSON structure.
+  2. Execute inside Quickshell:
+      • Launch your helper script inside Quickshell using the  Process
+      component.
+      • Read the JSON menu updates from standard output.
+  3. Render in QML:
+      • Parse the incoming JSON structure inside a Javascript object.
+      • Render the menu dynamically in GlobalMenu.qml using a QML  Repeater  or
+      Instantiator .
+      • Write click handlers that send the clicked item ID back to the helper
+      script via standard input to trigger actions (like "Close" or "Save") in
+      the target window.
+
+  ──────
+  ### Work Summary
+
+  • Analyzed all  .qml  files inside  /home/solaymanehimite/.config/quickshell/
+  to inspect layout, structure, and services.
+  • Evaluated performance and identified sub-optimal loops/spawns in
+  NetworkService.qml and Brightness.qml.
+  • Documented concrete refactoring steps to convert polling timers to event-
+  driven property bindings, read system backlight files directly, clean up
+  layouts, and improve typography.
+  • Formulated architectural steps for building a macOS-style global menu bar
+  on Wayland using D-Bus.

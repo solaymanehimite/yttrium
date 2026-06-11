@@ -4,33 +4,39 @@ import Quickshell.Networking
 
 import qs.src.services
 
-// TODO:
-RowLayout {
+Image {
     id: network
-    spacing: 0
 
-    property string networkState: "connected"
-    property bool isExpanded: false
+    property string currentIcon: {
+        const dev = NetworkService.connectedDevice;
+        if (!dev) {
+            return "wifi/none";
+        }
 
-    // states: conected, disconnected, connecting, scanning, disconnecting
+        if (dev.type === DeviceType.Wifi) {
+            if (!dev.connected) { return "wifi/none"; }
+            if (dev.state == ConnectionState.Unknown) { return "wifi/unknown"; }
+            if (dev.stateChanging) { return "wifi/portal"; }
+            if (dev.state == ConnectionState.Disconnected) { return "wifi/no_signal"; }
 
-    Timer {
-        id: stateChangeTimer
-        interval: 1000
-        onTriggered: {
-            network.isExpanded = false;
+            // if device is connected, check signal strength
+            if (NetworkService.connectedNetwork != null) {
+                const strength = NetworkService.connectedNetwork.signalStrength;;
+                const roundedStrength = Math.round(strength * 4);
+                if (roundedStrength <= 1) { return "wifi/no_signal"; }
+                if (roundedStrength <= 2) { return "wifi/weak"; }
+                if (roundedStrength <= 3) { return "wifi/half_full"; }
+                return "wifi/full";
+            }
+
+            return "wifi/unknown";
+
+        } else if (dev.type === DeviceType.Wired) {
+            if (dev.hasLink || dev.network) {return "lan/connected"; }
+            return "lan/no_internet";
         }
     }
 
-    Connections {
-        target: NetworkService
-        function onDevicesChanged() {
-        }
-    }
-
-    Image {
-        source: Networking.wifiEnabled ? Icon.getPath("wifi/full") : Icon.getPath("wifi/none")
+        source: Icon.getPath(network.currentIcon)
         sourceSize.width: 15
-        opacity: 0.7
-    }
 }

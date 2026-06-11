@@ -11,6 +11,5 @@ RowLayout {
     Image {
         source: Icon.getPath("battery/100plugged")
         sourceSize.width: 15
-        opacity: 0.7
     }
 }
