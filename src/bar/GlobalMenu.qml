@@ -1,17 +1,31 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import Quickshell.DBusMenu
 import Quickshell.Wayland
 
 import qs.src.services
 
 Pane {
-    anchors.fill: parent
+    id: globalMenuPane
     padding: 0
 
     leftPadding: 15
     topPadding: 5
     background: null
+    clip: true
+
+    NumberAnimation on height {
+        from: 0
+        to: globalMenuPane.parent.height
+        duration: 500
+    }
+
+    NumberAnimation on opacity {
+        from: 0
+        to: 1
+        duration: 1000
+    }
 
     RowLayout {
         id: globalMenu
@@ -20,7 +34,13 @@ Pane {
 
         property string windowTitle: {
             if (ToplevelManager.activeToplevel) {
-                return ToplevelManager.activeToplevel.title;
+                const appId = ToplevelManager.activeToplevel.appId;
+                if (appId.includes(".")) {
+                    const parts = appId.split(".");
+                    const name = parts[parts.length - 1];
+                    return name.charAt(0).toUpperCase() + name.slice(1);
+                }
+                return appId;
             }
             return "";
         }
