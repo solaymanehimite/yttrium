@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
-import Quickshell.DBusMenu
 import Quickshell.Wayland
 
 import qs.src.services
@@ -42,7 +41,7 @@ Pane {
                 }
                 return appId;
             }
-            return "";
+            return "Fedora";
         }
 
         Image {
