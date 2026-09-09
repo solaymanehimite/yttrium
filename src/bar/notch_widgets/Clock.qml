@@ -8,7 +8,7 @@ Row {
         // Google Sans is not Mono so we need to give the time text a fixed width to not keep resizing.
         // To do this we create a dummy text with the maximum size the time text can be.
         anchors.verticalCenter: parent.verticalCenter
-        text: "00:00:00"
+        text: "000000000"
         color: "transparent"
         font.family: "Google Sans Flex"
 

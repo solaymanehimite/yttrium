@@ -4,7 +4,6 @@ import qs.src.bar
 
 PanelWindow {
     id: bar
-    surfaceFormat.opaque: false
 
     anchors {
         top: true
@@ -17,4 +16,5 @@ PanelWindow {
 
     GlobalMenu {}
     Notch {}
+    // Tray {}
 }
