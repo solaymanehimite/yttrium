@@ -1,34 +1,26 @@
 import QtQuick
+import QtQuick.Layouts
 import qs.src.services
 
-Row {
-    spacing: 0
+// Time digits use tabular figures so the width is identical every second
+// (no more wobble from proportional digits). No dummy-text hack needed.
+RowLayout {
+    spacing: 6
 
     Text {
-        // Google Sans is not Mono so we need to give the time text a fixed width to not keep resizing.
-        // To do this we create a dummy text with the maximum size the time text can be.
-        anchors.verticalCenter: parent.verticalCenter
-        text: "000000000"
-        color: "transparent"
+        Layout.alignment: Qt.AlignVCenter
+        text: Time.time
+        color: "white"
         font.family: "Google Sans Flex"
-
-        Text {
-            anchors.verticalCenter: parent.verticalCenter
-            text: Time.time
-            color: "white"
-
-            font.pixelSize: 16
-            font.family: "Google Sans Flex"
-            font.weight: 500
-        }
+        font.pixelSize: 16
+        font.weight: 500
+        font.features: { "tnum": 1 }
     }
 
     Text {
-        anchors.verticalCenter: parent.verticalCenter
-
+        Layout.alignment: Qt.AlignVCenter
         text: Time.date
         color: "#aaaaaa"
-
         font.family: "Google Sans Flex"
         font.pixelSize: 13
     }
