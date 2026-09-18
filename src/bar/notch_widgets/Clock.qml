@@ -11,7 +11,7 @@ RowLayout {
         Layout.alignment: Qt.AlignVCenter
         text: Time.time
         color: "white"
-        font.family: "Inter Display"
+        font.family: "Google Sans Flex"
         font.pixelSize: 16
         font.weight: 600
         font.features: { "tnum": 1 }
@@ -21,7 +21,7 @@ RowLayout {
         Layout.alignment: Qt.AlignVCenter
         text: Time.date
         color: "#aaaaaa"
-        font.family: "Inter"
+        font.family: "Google Sans Flex"
         font.pixelSize: 13
     }
 }

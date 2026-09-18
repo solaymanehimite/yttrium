@@ -14,7 +14,9 @@ PanelWindow {
     implicitHeight: 30 // Set Top padding (not actual size)
     color: "transparent"
 
-    GlobalMenu {}
+    GlobalMenu {
+        barWindow: bar
+    }
     Notch {}
     // Tray {}
 
