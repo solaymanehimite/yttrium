@@ -32,16 +32,16 @@ PanelWindow {
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.namespace: "quickshell-dock"
 
-    readonly property int slotWidth: 46
+    readonly property int slotWidth: 50
     readonly property int slotHeight: 46
     readonly property int separatorWidth: 12
     readonly property int framePadding: 7
     readonly property int frameHeight: 60
-    readonly property int frameBottomMargin: 10
+    readonly property int frameBottomMargin: 4
     readonly property int revealZoneHeight: 32
     readonly property int peekHeight: 6
     readonly property int hiddenOffset: frameHeight + frameBottomMargin - peekHeight
-    readonly property int hideDelay: 380
+    readonly property int hideDelay: 220
     readonly property string whiteSurIconRoot: Quickshell.env("HOME") + "/.local/share/icons/WhiteSur-light/apps/scalable/"
     readonly property var pinnedAppIds: [
         "vicinae",
@@ -364,7 +364,7 @@ PanelWindow {
             bottom: parent.bottom
             bottomMargin: dock.frameBottomMargin
         }
-        width: Math.min(appRow.width + dock.framePadding * 2, dock.maxFrameWidth)
+        width: Math.min(appRow.width, dock.maxFrameWidth)
         height: dock.frameHeight
         radius: 18
         color: "#8a141414"
@@ -398,7 +398,6 @@ PanelWindow {
         Flickable {
             id: appViewport
             anchors.fill: parent
-            anchors.margins: dock.framePadding
             clip: true
             contentWidth: Math.max(width, appRow.width)
             contentHeight: height
@@ -414,10 +413,12 @@ PanelWindow {
                     let contentWidth = 0;
                     for (let i = 0; i < items.length; i++)
                         contentWidth += items[i].separator ? dock.separatorWidth : dock.slotWidth;
+                    if (items.length > 0)
+                        contentWidth += dock.framePadding * 2;
                     return contentWidth + Math.max(0, items.length - 1) * spacing;
                 }
                 height: appViewport.height
-                spacing: 4
+                spacing: 0
 
                 Repeater {
                     id: appRepeater
@@ -426,9 +427,10 @@ PanelWindow {
                     delegate: Item {
                         id: appButton
                         required property var modelData
+                        required property int index
 
-                        width: appButton.isSeparator ? dock.separatorWidth : dock.slotWidth
-                        height: dock.slotHeight
+                        width: appButton.isSeparator ? dock.separatorWidth : dock.slotWidth + (appButton.index === 0 ? dock.framePadding : 0) + (appButton.index === dock.dockApps.length - 1 ? dock.framePadding : 0)
+                        height: parent.height
                         anchors.verticalCenter: parent.verticalCenter
 
                         readonly property var appData: modelData
@@ -527,6 +529,7 @@ PanelWindow {
                             visible: !appButton.isSeparator && appData.toplevels.length > 0
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.bottom: parent.bottom
+                            anchors.bottomMargin: dock.framePadding
                             height: 3
                             spacing: 2
 

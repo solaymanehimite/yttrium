@@ -7,6 +7,7 @@ import qs.src.services
 Image {
     id: network
 
+    property real rasterScale: 1.0
     property string currentIcon: {
         const dev = NetworkService.connectedDevice;
         if (!dev) {
@@ -38,5 +39,11 @@ Image {
     }
 
         source: Icon.getPath(network.currentIcon)
-        sourceSize.width: 15
+        width: 15
+        height: 15
+        sourceSize.width: 15 * network.rasterScale
+        sourceSize.height: 15 * network.rasterScale
+        Layout.preferredWidth: 15
+        Layout.preferredHeight: 15
+        smooth: true
 }

@@ -8,9 +8,20 @@ RowLayout {
     id: root
 
     property string iconSource: ""
+    property real rasterScale: 1.0
     property string title: ""
     property real value: 0 // 0..1, clamped for the bar
     property string displayText: ""
+    property string statusIconSource: ""
+    property bool muted: false
+
+    opacity: root.muted ? 0.45 : 1.0
+    Behavior on opacity {
+        NumberAnimation {
+            duration: 180
+            easing.type: Easing.OutCubic
+        }
+    }
 
     spacing: 8
 
@@ -34,8 +45,10 @@ RowLayout {
 
     Image {
         source: root.iconSource
-        sourceSize.width: 16
-        sourceSize.height: 16
+        width: 16
+        height: 16
+        sourceSize.width: 16 * root.rasterScale
+        sourceSize.height: 16 * root.rasterScale
         Layout.preferredWidth: 16
         Layout.preferredHeight: 16
         Layout.alignment: Qt.AlignVCenter
@@ -72,21 +85,58 @@ RowLayout {
             width: Math.round(track.width * root.smoothValue)
             height: parent.height
             radius: 2.5
-            color: "#30d158"
+            color: "white"
         }
     }
 
-    Text {
-        text: root.displayText
-        color: "white"
+    Item {
         Layout.alignment: Qt.AlignVCenter
-        Layout.leftMargin: -5
-        Layout.preferredWidth: 40
-        horizontalAlignment: Text.AlignRight
-        elide: Text.ElideRight
-        font.family: "Inter"
-        font.pixelSize: 13
-        font.weight: 500
-        font.features: { "tnum": 1 }
+        Layout.preferredWidth: root.muted ? 0 : 40
+        Layout.preferredHeight: 16
+        Behavior on Layout.preferredWidth {
+            NumberAnimation {
+                duration: 220
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        Image {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            width: 10
+            height: 10
+            sourceSize.width: 10 * root.rasterScale
+            sourceSize.height: 10 * root.rasterScale
+            source: root.statusIconSource
+            opacity: root.statusIconSource === "" ? 0 : 1
+            smooth: true
+            asynchronous: true
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 180
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
+
+        Text {
+            anchors.fill: parent
+            text: root.displayText
+            color: "white"
+            opacity: root.muted ? 0 : 1
+            horizontalAlignment: Text.AlignRight
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+            font.family: "Inter"
+            font.pixelSize: 13
+            font.weight: 500
+            font.features: { "tnum": 1 }
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 180
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
     }
 }

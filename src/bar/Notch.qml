@@ -12,10 +12,15 @@ PopupWindow {
     anchor.rect.x: bar.width / 2 - width / 2
     anchor.rect.y: 0
 
+    // Showcase mode renders the notch at 3x its normal size, giving screen
+    // recordings enough pixels to preserve the small type and icons.
+    // Set to 1.0 when you want the compact everyday bar again.
+    property real showcaseScale: 1.0
+
     // Window geometry NEVER changes — only the inner pill morphs.
     // This keeps Niri from relayouting the popup every animation frame.
-    implicitWidth: 560
-    implicitHeight: 30
+    implicitWidth: 560 * notch.showcaseScale
+    implicitHeight: 30 * notch.showcaseScale
 
     property bool osdActive: osdMode !== ""
     property string osdMode: "" // "", "volume", "brightness"
@@ -27,7 +32,7 @@ PopupWindow {
     // Auto-hide the OSD shortly after the last change
     Timer {
         id: hideTimer
-        interval: 1500
+        interval: 800
         repeat: false
         onTriggered: notch.osdMode = ""
     }
@@ -81,8 +86,8 @@ PopupWindow {
             return Icon.getPath("volume/volume_medium");
         return Icon.getPath("volume/volume_high");
     }
-    property string volumeText: Audio.muted ? "Muted" : Math.round((Audio.volume ?? 0) * 100)
-    property real volumeFrac: Audio.muted ? 0 : (Audio.volume ?? 0)
+    property string volumeText: Math.round((Audio.volume ?? 0) * 100)
+    property real volumeFrac: Audio.volume ?? 0
 
     property real brightnessFrac: {
         const b = Brightness.brightness;
@@ -92,15 +97,21 @@ PopupWindow {
     }
     property string brightnessText: Math.round(brightnessFrac * 100)
 
-    // Fixed-size stage; the pill inside is what morphs.
+    // Keep layout in the original 560x30 coordinate space, then scale the
+    // complete stage as one unit. The popup is enlarged too, so the scaled
+    // content is never clipped at the window edges.
     Item {
-        anchors.fill: parent
+        id: stage
+        anchors.centerIn: parent
+        width: 560
+        height: 30
+        scale: notch.showcaseScale
 
         Rectangle {
             id: pill
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.top: parent.top
-            width: notch.osdActive ? 320 : 400
+            width: notch.osdActive ? (notch.osdMode === "volume" && Audio.muted ? 270 : 320) : 400
             height: 30
             color: "black"
             clip: true
@@ -153,8 +164,12 @@ PopupWindow {
                 Item {
                     Layout.fillWidth: true
                 }
-                Battery {}
-                Network {}
+                Battery {
+                    rasterScale: notch.showcaseScale
+                }
+                Network {
+                    rasterScale: notch.showcaseScale
+                }
             }
 
             // Expanded OSD content (same height, just wider)
@@ -178,9 +193,12 @@ PopupWindow {
                 OsdModal {
                     anchors.fill: parent
                     iconSource: notch.osdMode === "brightness" ? Icon.getPath("sun") : notch.volumeIcon
-                    title: notch.osdMode === "brightness" ? "Brightness" : "Volume"
+                    title: notch.osdMode === "brightness" ? "Brightness" : (Audio.muted ? "Muted" : "Volume")
                     value: notch.osdMode === "brightness" ? notch.brightnessFrac : notch.volumeFrac
                     displayText: notch.osdMode === "brightness" ? notch.brightnessText : notch.volumeText
+                    statusIconSource: ""
+                    muted: notch.osdMode === "volume" && Audio.muted
+                    rasterScale: notch.showcaseScale
                 }
             }
         }
