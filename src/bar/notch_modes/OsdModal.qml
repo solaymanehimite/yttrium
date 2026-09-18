@@ -47,7 +47,7 @@ RowLayout {
         text: root.title
         color: "white"
         Layout.alignment: Qt.AlignVCenter
-        font.family: "Google Sans Flex"
+        font.family: "Inter Display"
         font.pixelSize: 14
         font.weight: 600
     }
@@ -84,7 +84,7 @@ RowLayout {
         Layout.preferredWidth: 40
         horizontalAlignment: Text.AlignRight
         elide: Text.ElideRight
-        font.family: "Google Sans Flex"
+        font.family: "Inter"
         font.pixelSize: 13
         font.weight: 500
         font.features: { "tnum": 1 }
