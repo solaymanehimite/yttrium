@@ -17,4 +17,6 @@ PanelWindow {
     GlobalMenu {}
     Notch {}
     // Tray {}
+
+    Dock {}
 }
