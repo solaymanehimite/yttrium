@@ -7,7 +7,7 @@ Singleton {
     id: timeService
 
     readonly property string time: {
-        Qt.formatDateTime(clock.date, "hh:mm:ss");
+        Qt.formatDateTime(clock.date, "HH:mm");
     }
 
     readonly property string date: {
@@ -16,6 +16,6 @@ Singleton {
 
     SystemClock {
         id: clock
-        precision: SystemClock.Seconds
+        precision: SystemClock.Minutes
     }
 }

@@ -14,11 +14,12 @@ RowLayout {
     property string displayText: ""
     property string statusIconSource: ""
     property bool muted: false
+    readonly property int fadeDuration: 150
 
     opacity: root.muted ? 0.45 : 1.0
     Behavior on opacity {
         NumberAnimation {
-            duration: 180
+            duration: root.fadeDuration
             easing.type: Easing.OutCubic
         }
     }
@@ -95,7 +96,7 @@ RowLayout {
         Layout.preferredHeight: 16
         Behavior on Layout.preferredWidth {
             NumberAnimation {
-                duration: 220
+                duration: root.fadeDuration
                 easing.type: Easing.OutCubic
             }
         }
@@ -113,7 +114,7 @@ RowLayout {
             asynchronous: true
             Behavior on opacity {
                 NumberAnimation {
-                    duration: 180
+                    duration: root.fadeDuration
                     easing.type: Easing.OutCubic
                 }
             }
@@ -133,7 +134,7 @@ RowLayout {
             font.features: { "tnum": 1 }
             Behavior on opacity {
                 NumberAnimation {
-                    duration: 180
+                    duration: root.fadeDuration
                     easing.type: Easing.OutCubic
                 }
             }

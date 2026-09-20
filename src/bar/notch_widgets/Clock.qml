@@ -22,6 +22,6 @@ RowLayout {
         text: Time.date
         color: "#aaaaaa"
         font.family: "Google Sans Flex"
-        font.pixelSize: 13
+        font.pixelSize: 14
     }
 }

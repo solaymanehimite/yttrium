@@ -31,14 +31,14 @@ Item {
         anchors.centerIn: parent
         width: parent.width - 18
         height: 1
-        color: "#1f000000"
+        color: "#2affffff"
     }
 
     Rectangle {
         visible: !row.isSeparator
         anchors.fill: parent
         radius: 7
-        color: rowMouse.containsMouse && row.isEnabled ? "#12000000" : "transparent"
+        color: rowMouse.containsMouse && row.isEnabled ? "#1fffffff" : "transparent"
         opacity: row.isEnabled ? 1 : 0.48
 
         RowLayout {
@@ -63,7 +63,7 @@ Item {
                     radius: 5
                     color: "transparent"
                     border.width: 1
-                    border.color: "#99000000"
+                    border.color: "#99ffffff"
 
                     Rectangle {
                         visible: row.toggleOn
@@ -71,7 +71,7 @@ Item {
                         width: 4
                         height: 4
                         radius: 2
-                        color: "#d9000000"
+                        color: "#e6ffffff"
                     }
                 }
 
@@ -86,7 +86,7 @@ Item {
                         height: 1.5
                         radius: 0.75
                         rotation: 43
-                        color: "#d9000000"
+                        color: "#e6ffffff"
                     }
 
                     Rectangle {
@@ -96,7 +96,7 @@ Item {
                         height: 1.5
                         radius: 0.75
                         rotation: -47
-                        color: "#d9000000"
+                        color: "#e6ffffff"
                     }
                 }
             }
@@ -116,7 +116,7 @@ Item {
                     layer.enabled: true
                     layer.effect: MultiEffect {
                         colorization: 1
-                        colorizationColor: "#d9000000"
+                        colorizationColor: "#e6ffffff"
                     }
                 }
             }
@@ -125,11 +125,11 @@ Item {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
                 text: String(row.modelData.label || "").replace(/_/g, "")
-                color: "#e6000000"
+                color: "#e6ffffff"
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
                 font.family: "Google Sans Flex"
-                font.pixelSize: 13
+                font.pixelSize: 14
                 font.weight: 500
             }
 
@@ -146,7 +146,7 @@ Item {
                     height: 1.5
                     radius: 0.75
                     rotation: 45
-                    color: "#99000000"
+                    color: "#99ffffff"
                 }
 
                 Rectangle {
@@ -156,7 +156,7 @@ Item {
                     height: 1.5
                     radius: 0.75
                     rotation: -45
-                    color: "#99000000"
+                    color: "#99ffffff"
                 }
             }
         }

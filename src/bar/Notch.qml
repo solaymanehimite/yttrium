@@ -76,10 +76,8 @@ PopupWindow {
     // ---- OSD derived values ----
     property string volumeIcon: {
         if (Audio.muted)
-            return Icon.getPath("volume/volume_muted");
+            return Icon.getPath("volume/volume_muted_red");
         const v = Audio.volume ?? 0;
-        if (v <= 0.01)
-            return Icon.getPath("volume/volume_muted");
         if (v < 0.33)
             return Icon.getPath("volume/volume_low");
         if (v < 0.66)
@@ -164,7 +162,8 @@ PopupWindow {
                 Item {
                     Layout.fillWidth: true
                 }
-                Battery {
+                Volume {
+                    source: notch.volumeIcon
                     rasterScale: notch.showcaseScale
                 }
                 Network {

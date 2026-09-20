@@ -1,11 +1,8 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-
-import qs.src.services
 
 Pane {
     id: globalMenuPane
@@ -133,6 +130,42 @@ Pane {
         activateMenuItem(menuItem);
     }
 
+    function switchTopMenuOnHover(anchorItem, menuItem) {
+        if (!menuOverlay.isOpen || !anchorItem || !menuItem)
+            return;
+        if (itemKey(menuOverlay.rootMenu) === itemKey(menuItem))
+            return;
+
+        openTopMenu(anchorItem, menuItem);
+    }
+
+    function topMenuButtonAt(globalX, globalY) {
+        const items = menuRow.children;
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (!item.isTopMenuButton || !item.visible || !item.menuEntry)
+                continue;
+
+            const point = item.mapFromGlobal(globalX, globalY);
+            if (point.x >= 0 && point.x <= item.width
+                    && point.y >= -4 && point.y <= item.height + 4)
+                return item;
+        }
+        return null;
+    }
+
+    function hoverTopMenuAt(globalX, globalY) {
+        const button = topMenuButtonAt(globalX, globalY);
+        if (button)
+            switchTopMenuOnHover(button, button.menuEntry);
+    }
+
+    function clickTopMenuAt(globalX, globalY) {
+        const button = topMenuButtonAt(globalX, globalY);
+        if (button)
+            openTopMenu(button, button.menuEntry);
+    }
+
     function expandTopMenu(anchorItem, menuItem) {
         if (expandProcess.running)
             return;
@@ -258,32 +291,9 @@ Pane {
         spacing: 1
 
         Item {
-            width: 29
-            height: parent.height
-
-            Image {
-                anchors.centerIn: parent
-                width: 18
-                height: 18
-                sourceSize.width: 18
-                sourceSize.height: 18
-                source: Icon.getPath("logo")
-                fillMode: Image.PreserveAspectFit
-                layer.enabled: true
-                layer.effect: MultiEffect {
-                    colorization: 1
-                    colorizationColor: "white"
-                }
-            }
-        }
-
-        Item {
-            width: 14
-            height: parent.height
-        }
-
-        Item {
             id: appButton
+            readonly property bool isTopMenuButton: true
+            readonly property var menuEntry: globalMenuPane.appMenuNode
             y: 1
             width: Math.min(appLabel.implicitWidth + 16, 148)
             height: menuRow.height - 1
@@ -321,16 +331,21 @@ Pane {
                 color: "white"
                 elide: Text.ElideRight
                 font.family: "Google Sans Flex"
-                font.pixelSize: 14
+                font.pixelSize: 15
                 font.weight: 650
             }
 
             MouseArea {
                 id: appMouse
-                anchors.fill: parent
+                anchors {
+                    fill: parent
+                    topMargin: -4
+                    bottomMargin: -4
+                }
                 enabled: appButton.interactive
                 hoverEnabled: true
                 cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onEntered: globalMenuPane.switchTopMenuOnHover(appButton, globalMenuPane.appMenuNode)
                 onClicked: globalMenuPane.openTopMenu(appButton, globalMenuPane.appMenuNode)
             }
         }
@@ -341,6 +356,8 @@ Pane {
             delegate: Item {
                 id: menuButton
                 required property var modelData
+                readonly property bool isTopMenuButton: true
+                readonly property var menuEntry: modelData
 
                 visible: modelData && modelData.visible !== false && modelData.type !== "separator"
                 y: 1
@@ -380,16 +397,21 @@ Pane {
                     color: menuButton.itemEnabled ? "white" : "#78ffffff"
                     elide: Text.ElideRight
                     font.family: "Google Sans Flex"
-                    font.pixelSize: 14
+                    font.pixelSize: 15
                     font.weight: 500
                 }
 
                 MouseArea {
                     id: buttonMouse
-                    anchors.fill: parent
+                    anchors {
+                        fill: parent
+                        topMargin: -4
+                        bottomMargin: -4
+                    }
                     enabled: menuButton.itemEnabled
                     hoverEnabled: true
                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onEntered: globalMenuPane.switchTopMenuOnHover(menuButton, menuButton.modelData)
                     onClicked: globalMenuPane.openTopMenu(menuButton, menuButton.modelData)
                 }
             }
@@ -399,6 +421,7 @@ Pane {
     AppMenuOverlay {
         id: menuOverlay
         hostWindow: globalMenuPane.barWindow
+        menuController: globalMenuPane
         onItemActivated: function(item) {
             globalMenuPane.activateMenuItem(item);
         }

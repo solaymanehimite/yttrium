@@ -6,6 +6,7 @@ PanelWindow {
     id: root
 
     required property var hostWindow
+    property var menuController: null
 
     property var rootMenu: null
     property var menuStack: []
@@ -23,6 +24,11 @@ PanelWindow {
     screen: hostWindow ? hostWindow.screen : null
     visible: false
     color: "transparent"
+
+    BackgroundEffect.blurRegion: Region {
+        item: menuBox
+        radius: 12
+    }
 
     anchors {
         top: true
@@ -97,6 +103,34 @@ PanelWindow {
         onPressed: root.close()
     }
 
+    // The full-screen overlay sits above the menu bar, so forward hover and
+    // clicks from its top strip to the underlying top-level menu buttons.
+    MouseArea {
+        id: menuBarBridge
+        visible: root.visible
+        x: 0
+        y: 0
+        width: parent.width
+        height: 30
+        hoverEnabled: true
+        acceptedButtons: Qt.LeftButton
+
+        function forwardHover(localX, localY) {
+            if (!root.menuController)
+                return;
+            const point = menuBarBridge.mapToGlobal(localX, localY);
+            root.menuController.hoverTopMenuAt(point.x, point.y);
+        }
+
+        onEntered: forwardHover(mouseX, mouseY)
+        onPositionChanged: forwardHover(mouse.x, mouse.y)
+        onPressed: {
+            const point = menuBarBridge.mapToGlobal(mouse.x, mouse.y);
+            root.menuController.clickTopMenuAt(point.x, point.y);
+            mouse.accepted = true;
+        }
+    }
+
     Rectangle {
         id: menuBox
         visible: root.visible && root.currentMenu !== null
@@ -105,9 +139,9 @@ PanelWindow {
         width: root.menuWidth
         height: Math.min(Math.max(38, root.contentHeight()), root.height - y - 10)
         radius: 12
-        color: "#f8f8fa"
+        color: "#b8141414"
         border.width: 1
-        border.color: "#26000000"
+        border.color: "#553a3a3a"
         clip: true
 
         MouseArea {
@@ -143,7 +177,7 @@ PanelWindow {
                     Rectangle {
                         anchors.fill: parent
                         radius: 7
-                        color: backMouse.containsMouse ? "#12000000" : "transparent"
+                        color: backMouse.containsMouse ? "#1fffffff" : "transparent"
 
                     }
 
@@ -163,7 +197,7 @@ PanelWindow {
                             height: 1.5
                             radius: 0.75
                             rotation: -45
-                            color: "#99000000"
+                            color: "#99ffffff"
                         }
 
                         Rectangle {
@@ -173,7 +207,7 @@ PanelWindow {
                             height: 1.5
                             radius: 0.75
                             rotation: 45
-                            color: "#99000000"
+                            color: "#99ffffff"
                         }
                     }
 
@@ -186,10 +220,10 @@ PanelWindow {
                             verticalCenter: parent.verticalCenter
                         }
                         text: String(root.currentMenu ? root.currentMenu.label : "Back").replace(/_/g, "")
-                        color: "#d9000000"
+                        color: "#e6ffffff"
                         elide: Text.ElideRight
                         font.family: "Google Sans Flex"
-                        font.pixelSize: 13
+                        font.pixelSize: 14
                         font.weight: 600
                     }
 
@@ -207,7 +241,7 @@ PanelWindow {
                     width: parent.width - 18
                     height: visible ? 1 : 0
                     anchors.horizontalCenter: parent.horizontalCenter
-                    color: "#1f000000"
+                    color: "#2affffff"
                 }
 
                 Repeater {
