@@ -21,11 +21,13 @@ Pane {
     property var pendingSnapshot: undefined
     property var pendingExpandItem: null
     property var pendingExpandAnchor: null
+    property int focusRevision: 0
+    property int pendingExpandRevision: -1
 
     readonly property string bridgeBin: Quickshell.env("HOME") + "/.local/bin/noctalia-appmenu-bridge"
-    readonly property string activeAppId: snapshot && snapshot.app_id
-        ? snapshot.app_id
-        : (ToplevelManager.activeToplevel ? ToplevelManager.activeToplevel.appId : "")
+    readonly property string activeAppId: ToplevelManager.activeToplevel
+        ? ToplevelManager.activeToplevel.appId
+        : ""
     readonly property string activeAppName: appNameForId(activeAppId)
     readonly property var topLevelMenus: snapshot && snapshot.menu && snapshot.menu.children
         ? snapshot.menu.children
@@ -87,8 +89,39 @@ Pane {
         return parts.join(" ") || "Application";
     }
 
+    function appIdKey(appId) {
+        return String(appId || "").replace(/\.desktop$/i, "").toLowerCase();
+    }
+
+    // A snapshot is only useful while it belongs to the currently focused
+    // toplevel. The bridge can be slow (or stop receiving compositor events),
+    // so keeping its last successful payload would otherwise pin the menu of
+    // an old window indefinitely. The title check also distinguishes two
+    // windows of the same app, which is important for Firefox.
+    function snapshotBelongsToActiveWindow(value) {
+        if (!value || value.v !== 1)
+            return false;
+
+        const active = ToplevelManager.activeToplevel;
+        if (!active)
+            return !value.app_id && (!value.menu || !value.menu.children
+                    || value.menu.children.length === 0);
+
+        const snapshotAppId = appIdKey(value.app_id);
+        const activeAppId = appIdKey(active.appId);
+        if (!snapshotAppId || !activeAppId || snapshotAppId !== activeAppId)
+            return false;
+
+        const snapshotTitle = String(value.title || "").trim();
+        const activeTitle = String(active.title || "").trim();
+        return !snapshotTitle || !activeTitle || snapshotTitle === activeTitle;
+    }
+
     function queueSnapshot(value) {
-        pendingSnapshot = value;
+        pendingSnapshot = {
+            value: value,
+            revision: focusRevision
+        };
         Qt.callLater(applyPendingSnapshot);
     }
 
@@ -96,15 +129,23 @@ Pane {
         if (pendingSnapshot === undefined)
             return;
 
-        const nextSnapshot = pendingSnapshot;
+        const pending = pendingSnapshot;
         pendingSnapshot = undefined;
-        menuOverlay.close();
+        if (pending.revision !== focusRevision)
+            return;
 
+        const nextSnapshot = pending.value;
         if (!nextSnapshot || nextSnapshot.v !== 1) {
             snapshot = null;
             return;
         }
 
+        // FileView can replay an old active.json after focus changes. Ignore
+        // it rather than allowing it to resurrect the previous app's menu.
+        if (!snapshotBelongsToActiveWindow(nextSnapshot))
+            return;
+
+        menuOverlay.close();
         snapshot = nextSnapshot;
     }
 
@@ -172,6 +213,7 @@ Pane {
 
         pendingExpandAnchor = anchorItem;
         pendingExpandItem = menuItem;
+        pendingExpandRevision = focusRevision;
         const command = [bridgeBin, "atspi-expand", menuItem.service, menuItem.path];
         if (focusWindowId > 0)
             command.push("--winid", String(focusWindowId));
@@ -243,10 +285,14 @@ Pane {
             onStreamFinished: {
                 const anchorItem = globalMenuPane.pendingExpandAnchor;
                 const original = globalMenuPane.pendingExpandItem;
+                const expandRevision = globalMenuPane.pendingExpandRevision;
                 globalMenuPane.pendingExpandAnchor = null;
                 globalMenuPane.pendingExpandItem = null;
+                globalMenuPane.pendingExpandRevision = -1;
 
-                if (!anchorItem || !original)
+                if (!anchorItem || !original
+                        || expandRevision !== globalMenuPane.focusRevision
+                        || !globalMenuPane.snapshotBelongsToActiveWindow(globalMenuPane.snapshot))
                     return;
 
                 let children = [];
@@ -280,7 +326,29 @@ Pane {
         target: ToplevelManager
 
         function onActiveToplevelChanged() {
+            const pending = globalMenuPane.pendingSnapshot;
+            const pendingBelongs = pending !== undefined
+                && globalMenuPane.snapshotBelongsToActiveWindow(pending.value);
+            const currentBelongs = globalMenuPane.snapshot !== null
+                && globalMenuPane.snapshotBelongsToActiveWindow(globalMenuPane.snapshot);
+
+            globalMenuPane.focusRevision += 1;
+            globalMenuPane.pendingExpandRevision = -1;
+            globalMenuPane.pendingExpandAnchor = null;
+            globalMenuPane.pendingExpandItem = null;
             menuOverlay.close();
+
+            // Keep a payload that arrived just before the compositor's focus
+            // notification, but never keep data belonging to the old window.
+            if (!currentBelongs)
+                globalMenuPane.snapshot = null;
+
+            if (pendingBelongs) {
+                pending.revision = globalMenuPane.focusRevision;
+                globalMenuPane.pendingSnapshot = pending;
+            } else {
+                globalMenuPane.pendingSnapshot = undefined;
+            }
         }
     }
 

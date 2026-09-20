@@ -6,14 +6,17 @@ checksum="5b59b2084c5cb42f997d9b96a92c10bd2155e1a20e77b0f53a78f5c21c43152d"
 asset="noctalia-appmenu-bridge-linux-x86_64"
 url="https://github.com/yolo-labz/noctalia-appmenu/releases/download/${version}/${asset}"
 bin_dir="${HOME}/.local/bin"
+libexec_dir="${HOME}/.local/libexec/noctalia-appmenu-bridge"
 real_bin="${bin_dir}/noctalia-appmenu-bridge.bin"
 launcher="${bin_dir}/noctalia-appmenu-bridge"
+qs_bin="$(command -v qs 2>/dev/null || true)"
+: "${qs_bin:=/usr/bin/qs}"
 unit_dir="${HOME}/.config/systemd/user"
 unit="${unit_dir}/quickshell-appmenu-bridge.service"
 environment_dir="${HOME}/.config/environment.d"
 environment_file="${environment_dir}/90-quickshell-appmenu.conf"
 
-mkdir -p "$bin_dir" "$unit_dir" "$environment_dir"
+mkdir -p "$bin_dir" "$libexec_dir" "$unit_dir" "$environment_dir"
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT INT TERM
 
@@ -21,10 +24,25 @@ curl --fail --location --silent --show-error "$url" --output "$tmp"
 printf '%s  %s\n' "$checksum" "$tmp" | sha256sum --check --status
 install -m 0755 "$tmp" "$real_bin"
 
+cat > "$libexec_dir/qs" <<EOF
+#!/bin/sh
+# The bridge publishes through qs IPC synchronously. If the shell is not
+# running, or its IPC server is wedged, do not let that child freeze the
+# bridge's focus loop forever.
+if [ "\${1:-}" = "ipc" ] && [ "\${2:-}" = "call" ]; then
+    exec /usr/bin/timeout --kill-after=1s 3s "$qs_bin" "\$@"
+fi
+exec "$qs_bin" "\$@"
+EOF
+chmod 0755 "$libexec_dir/qs"
+
 cat > "$launcher" <<'EOF'
 #!/bin/sh
 # The upstream release is built by Nix and records its Nix loader path.
 # Fedora provides the same glibc loader at this stable location.
+# Keep qs IPC best-effort: a stopped shell must not stall focus tracking.
+bridge_libexec="$HOME/.local/libexec/noctalia-appmenu-bridge"
+export PATH="$bridge_libexec:${PATH:-/usr/local/bin:/usr/bin}"
 exec /lib64/ld-linux-x86-64.so.2 "$HOME/.local/bin/noctalia-appmenu-bridge.bin" "$@"
 EOF
 chmod 0755 "$launcher"
