@@ -23,12 +23,8 @@ PopupWindow {
     implicitHeight: 30 * notch.showcaseScale
 
     property bool osdActive: osdMode !== ""
-    property string osdMode: "" // "", "volume", "brightness", "multipad"
+    property string osdMode: "" // "", "volume", "brightness"
     property bool _ready: false
-
-    property int multipadSliderIndex: 0
-    property string multipadTitle: "Slider " + multipadSliderIndex
-    property real multipadValue: 0
     property bool multipadSuppressExternalOsd: false
 
     visible: true
@@ -64,6 +60,9 @@ PopupWindow {
 
         // Keep the existing volume and brightness OSDs as the presentation
         // layer. Multipad only supplies the relative adjustment.
+        if (eventName !== "volume" && eventName !== "brightness")
+            return;
+
         notch.multipadSuppressExternalOsd = true;
         multipadGuard.restart();
 
@@ -73,11 +72,6 @@ PopupWindow {
         } else if (eventName === "brightness") {
             Brightness.adjustRelative(delta);
             notch.osdMode = "brightness";
-        } else {
-            notch.multipadTitle = "Slider " + sliderIndex;
-            notch.multipadSliderIndex = sliderIndex;
-            notch.multipadValue = value;
-            notch.osdMode = "multipad";
         }
         hideTimer.restart();
     }
@@ -250,13 +244,6 @@ PopupWindow {
                     rasterScale: notch.showcaseScale
                 }
 
-                MultipadOsd {
-                    anchors.fill: parent
-                    visible: notch.osdMode === "multipad"
-                    sliderIndex: notch.multipadSliderIndex
-                    title: notch.multipadTitle
-                    value: notch.multipadValue
-                }
             }
         }
     }
