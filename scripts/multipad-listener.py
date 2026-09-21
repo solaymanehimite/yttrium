@@ -6,7 +6,12 @@ import socket
 import sys
 import time
 
-SOCKET_PATH = os.environ.get("CLEARTOUCHD_SOCKET", "/run/user/1000/cleartouchd.sock")
+SOCKET_PATH = os.path.expanduser(
+    os.environ.get(
+        "CLEARTOUCHD_SOCKET",
+        "/home/solaymanehimite/.cache/cleartouchd.sock",
+    )
+)
 
 while True:
     try:
