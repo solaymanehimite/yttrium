@@ -11,6 +11,9 @@ Singleton {
     property int max: 1
     readonly property real brightness: max > 0 ? current / max : 0
     property bool _dirty: false
+    property real _targetBrightness: -1
+    property int _queuedBrightness: 0
+    property bool _writePending: false
 
     // max_brightness is static — one-shot read is enough.
     FileView {
@@ -36,6 +39,54 @@ Singleton {
                 }
             }
         }
+    }
+
+    Process {
+        id: writeProc
+        command: ["brightnessctl", "set", "0%"]
+
+        onExited: {
+            if (brightnessService._writePending) {
+                brightnessService._writePending = false;
+                writeProc.command = [
+                    "brightnessctl",
+                    "set",
+                    String(brightnessService._queuedBrightness) + "%"
+                ];
+                writeProc.running = true;
+            } else {
+                brightnessService._targetBrightness = -1;
+                brightnessService.refresh();
+            }
+        }
+    }
+
+    function clamp(v) {
+        return Math.max(0, Math.min(1, Number(v)));
+    }
+
+    function adjustRelative(delta) {
+        if (max <= 0)
+            return -1;
+
+        const base = brightnessService._targetBrightness >= 0
+            ? brightnessService._targetBrightness
+            : brightnessService.brightness;
+        brightnessService._targetBrightness = clamp(base + Number(delta));
+        brightnessService.current = Math.round(brightnessService._targetBrightness * max);
+        brightnessService._queuedBrightness = Math.round(brightnessService._targetBrightness * 100);
+
+        if (writeProc.running) {
+            brightnessService._writePending = true;
+        } else {
+            writeProc.command = [
+                "brightnessctl",
+                "set",
+                String(brightnessService._queuedBrightness) + "%"
+            ];
+            writeProc.running = true;
+        }
+        return brightnessService._targetBrightness;
     }
 
     function refresh() {

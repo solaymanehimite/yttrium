@@ -23,8 +23,13 @@ PopupWindow {
     implicitHeight: 30 * notch.showcaseScale
 
     property bool osdActive: osdMode !== ""
-    property string osdMode: "" // "", "volume", "brightness"
+    property string osdMode: "" // "", "volume", "brightness", "multipad"
     property bool _ready: false
+
+    property int multipadSliderIndex: 0
+    property string multipadTitle: "Slider " + multipadSliderIndex
+    property real multipadValue: 0
+    property bool multipadSuppressExternalOsd: false
 
     visible: true
     color: "transparent"
@@ -37,12 +42,43 @@ PopupWindow {
         onTriggered: notch.osdMode = ""
     }
 
+    Timer {
+        id: multipadGuard
+        interval: 1000
+        repeat: false
+        onTriggered: notch.multipadSuppressExternalOsd = false
+    }
+
     function poke(mode) {
-        if (!notch._ready)
+        if (!notch._ready || notch.multipadSuppressExternalOsd)
             return;
         // Switching mode while already shown: swap content without
         // restarting the width animation (width only depends on osdActive).
         notch.osdMode = mode;
+        hideTimer.restart();
+    }
+
+    function pokeMultipad(sliderIndex, value, delta, eventName) {
+        if (!notch._ready)
+            return;
+
+        // Keep the existing volume and brightness OSDs as the presentation
+        // layer. Multipad only supplies the relative adjustment.
+        notch.multipadSuppressExternalOsd = true;
+        multipadGuard.restart();
+
+        if (eventName === "volume") {
+            Audio.adjustRelative(delta);
+            notch.osdMode = "volume";
+        } else if (eventName === "brightness") {
+            Brightness.adjustRelative(delta);
+            notch.osdMode = "brightness";
+        } else {
+            notch.multipadTitle = "Slider " + sliderIndex;
+            notch.multipadSliderIndex = sliderIndex;
+            notch.multipadValue = value;
+            notch.osdMode = "multipad";
+        }
         hideTimer.restart();
     }
 
@@ -60,16 +96,25 @@ PopupWindow {
     Connections {
         target: Audio
         function onVolumeChanged() {
-            poke("volume");
+            if (!notch.multipadSuppressExternalOsd)
+                poke("volume");
         }
         function onMutedChanged() {
-            poke("volume");
+            if (!notch.multipadSuppressExternalOsd)
+                poke("volume");
         }
     }
     Connections {
         target: Brightness
         function onBrightnessChanged() {
-            poke("brightness");
+            if (!notch.multipadSuppressExternalOsd)
+                poke("brightness");
+        }
+    }
+    Connections {
+        target: MultiPad
+        function onSliderChanged(sliderIndex, value, delta, eventName) {
+            notch.pokeMultipad(sliderIndex, value, delta, eventName);
         }
     }
 
@@ -109,7 +154,11 @@ PopupWindow {
             id: pill
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.top: parent.top
-            width: notch.osdActive ? (notch.osdMode === "volume" && Audio.muted ? 270 : 320) : 400
+            width: notch.osdActive
+                ? (notch.osdMode === "multipad"
+                    ? 340
+                    : (notch.osdMode === "volume" && Audio.muted ? 270 : 320))
+                : 400
             height: 30
             color: "black"
             clip: true
@@ -191,6 +240,7 @@ PopupWindow {
 
                 OsdModal {
                     anchors.fill: parent
+                    visible: notch.osdMode !== "multipad"
                     iconSource: notch.osdMode === "brightness" ? Icon.getPath("sun") : notch.volumeIcon
                     title: notch.osdMode === "brightness" ? "Brightness" : (Audio.muted ? "Muted" : "Volume")
                     value: notch.osdMode === "brightness" ? notch.brightnessFrac : notch.volumeFrac
@@ -198,6 +248,14 @@ PopupWindow {
                     statusIconSource: ""
                     muted: notch.osdMode === "volume" && Audio.muted
                     rasterScale: notch.showcaseScale
+                }
+
+                MultipadOsd {
+                    anchors.fill: parent
+                    visible: notch.osdMode === "multipad"
+                    sliderIndex: notch.multipadSliderIndex
+                    title: notch.multipadTitle
+                    value: notch.multipadValue
                 }
             }
         }
