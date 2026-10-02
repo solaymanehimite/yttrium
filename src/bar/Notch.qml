@@ -8,19 +8,24 @@ import qs.src.services
 
 PopupWindow {
     id: notch
+
     anchor.window: bar
     anchor.rect.x: bar.width / 2 - width / 2
     anchor.rect.y: 0
 
-    // Showcase mode renders the notch at 3x its normal size, giving screen
-    // recordings enough pixels to preserve the small type and icons.
-    // Set to 1.0 when you want the compact everyday bar again.
+    // The notch has three intentional resting states: compact, a small
+    // hover lift, and a full control surface after a click.
     property real showcaseScale: 1.0
+    property bool hovered: false
+    property bool expanded: false
+    property real targetWidth: expanded ? 500 : (hovered ? 412 : (osdActive ? 320 : 400))
+    property real targetHeight: expanded ? 210 : (hovered ? 33 : 30)
 
-    // Window geometry NEVER changes — only the inner pill morphs.
-    // This keeps Niri from relayouting the popup every animation frame.
-    implicitWidth: 560 * notch.showcaseScale
-    implicitHeight: 30 * notch.showcaseScale
+    // Keep the popup window stable. Only the visible panel morphs, which is
+    // the same animation strategy as the original notch and avoids compositor
+    // relayout glitches while the pointer is over it.
+    implicitWidth: 560
+    implicitHeight: 250
 
     property bool osdActive: osdMode !== ""
     property string osdMode: "" // "", "volume", "brightness"
@@ -30,7 +35,7 @@ PopupWindow {
     visible: true
     color: "transparent"
 
-    // Auto-hide the OSD shortly after the last change
+    // Auto-hide the OSD shortly after the last change.
     Timer {
         id: hideTimer
         interval: 800
@@ -48,8 +53,6 @@ PopupWindow {
     function poke(mode) {
         if (!notch._ready || notch.multipadSuppressExternalOsd)
             return;
-        // Switching mode while already shown: swap content without
-        // restarting the width animation (width only depends on osdActive).
         notch.osdMode = mode;
         hideTimer.restart();
     }
@@ -58,8 +61,6 @@ PopupWindow {
         if (!notch._ready)
             return;
 
-        // Keep the existing volume and brightness OSDs as the presentation
-        // layer. Multipad only supplies the relative adjustment.
         if (eventName !== "volume" && eventName !== "brightness")
             return;
 
@@ -69,7 +70,7 @@ PopupWindow {
         if (eventName === "volume") {
             Audio.adjustRelative(delta);
             notch.osdMode = "volume";
-        } else if (eventName === "brightness") {
+        } else {
             Brightness.adjustRelative(delta);
             notch.osdMode = "brightness";
         }
@@ -77,6 +78,7 @@ PopupWindow {
     }
 
     Component.onCompleted: _initTimer.start()
+
     Timer {
         id: _initTimer
         interval: 800
@@ -84,9 +86,6 @@ PopupWindow {
         onTriggered: notch._ready = true
     }
 
-    // Any external change (e.g. fn volume / brightness keys handled by
-    // the compositor / wireplumber / brightnessctl) flows through these
-    // reactive services, so we just watch them.
     Connections {
         target: Audio
         function onVolumeChanged() {
@@ -98,6 +97,7 @@ PopupWindow {
                 poke("volume");
         }
     }
+
     Connections {
         target: Brightness
         function onBrightnessChanged() {
@@ -105,6 +105,7 @@ PopupWindow {
                 poke("brightness");
         }
     }
+
     Connections {
         target: MultiPad
         function onSliderChanged(sliderIndex, value, delta, eventName) {
@@ -112,7 +113,6 @@ PopupWindow {
         }
     }
 
-    // ---- OSD derived values ----
     property string volumeIcon: {
         if (Audio.muted)
             return Icon.getPath("volume/volume_muted_red");
@@ -134,33 +134,50 @@ PopupWindow {
     }
     property string brightnessText: Math.round(brightnessFrac * 100)
 
-    // Keep layout in the original 560x30 coordinate space, then scale the
-    // complete stage as one unit. The popup is enlarged too, so the scaled
-    // content is never clipped at the window edges.
+    readonly property int wifiPercent: {
+        const network = NetworkService.connectedNetwork;
+        if (!network)
+            return 0;
+        const strength = Number(network.signalStrength);
+        if (isNaN(strength))
+            return 0;
+        return Math.round(Math.max(0, Math.min(1, strength)) * 100);
+    }
+    readonly property string wifiValue: NetworkService.connectedNetwork
+        ? wifiPercent + "%"
+        : "Offline"
+    readonly property string wifiDetail: NetworkService.connectedNetwork
+        ? "Signal strength"
+        : (NetworkService.connectedDevice ? "Connected" : "Not connected")
+
+    // A hidden instance keeps the existing network icon selection logic in one
+    // place, including wired and transitional network states.
+    Network {
+        id: wifiIconProbe
+        visible: false
+        width: 0
+        height: 0
+    }
+
     Item {
-        id: stage
-        anchors.centerIn: parent
-        width: 560
-        height: 30
-        scale: notch.showcaseScale
+        id: surface
+        anchors.fill: parent
 
         Rectangle {
-            id: pill
-            anchors.horizontalCenter: parent.horizontalCenter
+            id: panel
             anchors.top: parent.top
-            width: notch.osdActive
-                ? (notch.osdMode === "multipad"
-                    ? 340
-                    : (notch.osdMode === "volume" && Audio.muted ? 270 : 320))
-                : 400
-            height: 30
-            color: "black"
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: notch.targetWidth
+            height: notch.targetHeight
+            z: 1
             clip: true
-
+            color: "#000000"
+            border.width: 0
             topLeftRadius: 0
             topRightRadius: 0
-            bottomLeftRadius: height / 2
-            bottomRightRadius: height / 2
+            bottomLeftRadius: notch.expanded ? 42 : height / 2
+            bottomRightRadius: notch.expanded ? 42 : height / 2
+            opacity: 0
 
             Behavior on width {
                 NumberAnimation {
@@ -169,12 +186,30 @@ PopupWindow {
                 }
             }
 
-            // One-time entrance only — never re-runs on morph.
-            opacity: 0
+            Behavior on height {
+                NumberAnimation {
+                    duration: 300
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            MouseArea {
+                id: interaction
+                anchors.fill: parent
+                z: 0
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+
+                onEntered: notch.hovered = true
+                onExited: notch.hovered = false
+                onClicked: notch.expanded = !notch.expanded
+            }
+
             Component.onCompleted: entrance.start()
+
             NumberAnimation {
                 id: entrance
-                target: pill
+                target: panel
                 property: "opacity"
                 from: 0
                 to: 1
@@ -182,16 +217,13 @@ PopupWindow {
                 easing.type: Easing.OutCubic
             }
 
-            // Idle notch content
             RowLayout {
                 id: idleRow
-                anchors {
-                    fill: parent
-                    leftMargin: 10
-                    rightMargin: 10
-                }
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
                 spacing: 15
-                opacity: notch.osdActive ? 0 : 1
+                opacity: !notch.expanded && !notch.osdActive ? 1 : 0
                 visible: opacity > 0.01
 
                 Behavior on opacity {
@@ -214,15 +246,12 @@ PopupWindow {
                 }
             }
 
-            // Expanded OSD content (same height, just wider)
             Item {
                 id: osdWrap
-                anchors {
-                    fill: parent
-                    leftMargin: 14
-                    rightMargin: 14
-                }
-                opacity: notch.osdActive ? 1 : 0
+                anchors.fill: parent
+                anchors.leftMargin: 14
+                anchors.rightMargin: 14
+                opacity: !notch.expanded && notch.osdActive ? 1 : 0
                 visible: opacity > 0.01
 
                 Behavior on opacity {
@@ -243,6 +272,133 @@ PopupWindow {
                     muted: notch.osdMode === "volume" && Audio.muted
                     rasterScale: notch.showcaseScale
                 }
+            }
+
+            Item {
+                id: expandedContent
+                anchors.fill: parent
+                opacity: notch.expanded ? 1 : 0
+                visible: opacity > 0.01
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 220
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                Item {
+                    id: clockSection
+                    x: 18
+                    y: 16
+                    width: 230
+                    height: 162
+
+                    Text {
+                        id: monthLabel
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.leftMargin: 4
+                        text: Time.monthYear
+                        color: "#f6f8fb"
+                        font.family: "Google Sans Flex"
+                        font.pixelSize: 15
+                        font.weight: Font.Medium
+                    }
+
+                    Row {
+                        anchors.top: monthLabel.bottom
+                        anchors.topMargin: 10
+                        width: parent.width
+                        height: 16
+                        spacing: 0
+
+                        Repeater {
+                            model: ["S", "M", "T", "W", "T", "F", "S"]
+
+                            Text {
+                                width: 30
+                                height: 16
+                                text: modelData
+                                horizontalAlignment: Text.AlignHCenter
+                                color: "#727b89"
+                                font.family: "Google Sans Flex"
+                                font.pixelSize: 11
+                                font.weight: Font.Medium
+                            }
+                        }
+                    }
+
+                    Grid {
+                        anchors.top: monthLabel.bottom
+                        anchors.topMargin: 30
+                        width: parent.width
+                        columns: 7
+                        rowSpacing: 2
+                        columnSpacing: 0
+
+                        Repeater {
+                            model: 42
+
+                            Item {
+                                id: dayCell
+                                property int calendarDay: index - new Date(Time.year, Time.month, 1).getDay() + 1
+                                property bool isCurrentDay: calendarDay === Time.day
+                                width: 30
+                                height: 22
+                                visible: calendarDay > 0 && calendarDay <= new Date(Time.year, Time.month + 1, 0).getDate()
+
+                                Rectangle {
+                                    anchors.centerIn: parent
+                                    width: 22
+                                    height: 22
+                                    radius: width / 2
+                                    color: dayCell.isCurrentDay ? "#f6f8fb" : "transparent"
+                                }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: dayCell.calendarDay
+                                    color: dayCell.isCurrentDay ? "#111318" : "#c1c7d0"
+                                    font.family: "Google Sans Flex"
+                                    font.pixelSize: 12
+                                    font.weight: dayCell.isCurrentDay ? Font.Medium : Font.Normal
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Column {
+                    id: statsColumn
+                    x: 252
+                    y: 18
+                    width: parent.width - x - 18
+                    spacing: 2
+
+                    StatusPill {
+                        width: statsColumn.width
+                        height: 56
+                        title: "Wi-Fi"
+                        detail: notch.wifiDetail
+                        value: notch.wifiValue
+                        iconSource: Icon.getPath(wifiIconProbe.currentIcon)
+                        accentColor: "#f6f8fb"
+                        showProgress: false
+                    }
+
+                    StatusPill {
+                        width: statsColumn.width
+                        height: 56
+                        title: "Volume"
+                        detail: Audio.muted ? "Output muted" : "System output"
+                        value: Audio.muted ? "Muted" : notch.volumeText + "%"
+                        iconSource: notch.volumeIcon
+                        accentColor: "#f6f8fb"
+                        progress: Audio.muted ? 0 : notch.volumeFrac
+                    }
+                }
+
 
             }
         }

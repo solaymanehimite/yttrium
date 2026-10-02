@@ -7,13 +7,25 @@ import qs.src.services
 RowLayout {
     spacing: 6
 
+    TextMetrics {
+        id: clockWidth
+        text: "00:00"
+        font.family: "Google Sans Flex"
+        font.pixelSize: 16
+        font.weight: Font.Medium
+        font.features: { "tnum": 1 }
+    }
+
     Text {
         Layout.alignment: Qt.AlignVCenter
+        Layout.minimumWidth: clockWidth.width
+        Layout.preferredWidth: clockWidth.width
+        Layout.maximumWidth: clockWidth.width
         text: Time.time
         color: "white"
         font.family: "Google Sans Flex"
         font.pixelSize: 16
-        font.weight: 600
+        font.weight: Font.Medium
         font.features: { "tnum": 1 }
     }
 
@@ -23,5 +35,6 @@ RowLayout {
         color: "#aaaaaa"
         font.family: "Google Sans Flex"
         font.pixelSize: 14
+        font.weight: Font.Normal
     }
 }
