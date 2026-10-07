@@ -29,23 +29,62 @@ Pane {
         ? ToplevelManager.activeToplevel.appId
         : ""
     readonly property string activeAppName: appNameForId(activeAppId)
-    readonly property var topLevelMenus: snapshot && snapshot.menu && snapshot.menu.children
-        ? snapshot.menu.children
-        : []
-    readonly property var appMenuNode: {
-        if (topLevelMenus.length === 0)
-            return null;
-        const first = topLevelMenus[0];
-        return normalizedLabel(first.label) === normalizedLabel(activeAppName) ? first : null;
+    // Some bridge fallbacks add a synthetic application-menu wrapper around
+    // the real top-level entries. For example: Phi -> [Phi, Window]. Keep the
+    // wrapper out of the rendered menu or the app menu contains a duplicate
+    // "Phi" submenu and the native entries appear in the wrong place.
+    readonly property var topLevelMenus: {
+        const children = snapshot && snapshot.menu && snapshot.menu.children
+            ? snapshot.menu.children
+            : [];
+        if (children.length > 0 && children[0].children
+                && children[0].children.length > 0
+                && normalizedLabel(children[0].label) === normalizedLabel(children[0].children[0].label))
+            return children[0].children.concat(children.slice(1));
+        return children;
     }
-    readonly property var nativeMenus: appMenuNode ? topLevelMenus.slice(1) : topLevelMenus
+    readonly property var appMenuNode: {
+        for (let i = 0; i < topLevelMenus.length; i++) {
+            const item = topLevelMenus[i];
+            if (item && isApplicationMenuLabel(item.label))
+                return item;
+        }
+        return null;
+    }
+    readonly property var nativeMenus: appMenuNode
+        ? topLevelMenus.filter(item => item !== appMenuNode)
+        : topLevelMenus
     readonly property int focusWindowId: snapshot && snapshot.focus_winid ? snapshot.focus_winid : 0
 
     Accessible.role: Accessible.MenuBar
     Accessible.name: "Application menu"
 
     function normalizedLabel(value) {
-        return String(value || "").replace(/_/g, "").trim().toLowerCase();
+        return String(value || "").replace(/[\s_\-–—:]+/g, "").trim().toLowerCase();
+    }
+
+    function isApplicationMenuLabel(label) {
+        const candidate = normalizedLabel(label);
+        if (!candidate)
+            return false;
+
+        const values = [
+            activeAppName,
+            snapshot ? snapshot.title : "",
+            snapshot ? snapshot.app_id : ""
+        ];
+        for (let i = 0; i < values.length; i++) {
+            const value = normalizedLabel(values[i]);
+            if (!value)
+                continue;
+            // Desktop entries commonly say "Firefox" while the window or
+            // bridge identifies it as "Mozilla Firefox" (and vice versa).
+            if (candidate === value
+                    || (candidate.length >= 4 && value.indexOf(candidate) !== -1)
+                    || (value.length >= 4 && candidate.indexOf(value) !== -1))
+                return true;
+        }
+        return false;
     }
 
     function cleanLabel(value) {
@@ -96,8 +135,7 @@ Pane {
     // A snapshot is only useful while it belongs to the currently focused
     // toplevel. The bridge can be slow (or stop receiving compositor events),
     // so keeping its last successful payload would otherwise pin the menu of
-    // an old window indefinitely. The title check also distinguishes two
-    // windows of the same app, which is important for Firefox.
+    // an old window indefinitely.
     function snapshotBelongsToActiveWindow(value) {
         if (!value || value.v !== 1)
             return false;
@@ -112,9 +150,10 @@ Pane {
         if (!snapshotAppId || !activeAppId || snapshotAppId !== activeAppId)
             return false;
 
-        const snapshotTitle = String(value.title || "").trim();
-        const activeTitle = String(active.title || "").trim();
-        return !snapshotTitle || !activeTitle || snapshotTitle === activeTitle;
+        // Firefox, Electron, and document-based GTK apps can expose different
+        // title strings through AT-SPI and the compositor. The app id is the
+        // stable association; rejecting on title mismatch leaves the bar empty.
+        return true;
     }
 
     function queueSnapshot(value) {
@@ -362,9 +401,9 @@ Pane {
             id: appButton
             readonly property bool isTopMenuButton: true
             readonly property var menuEntry: globalMenuPane.appMenuNode
-            y: 1
-            width: Math.min(appLabel.implicitWidth + 16, 148)
-            height: menuRow.height - 1
+            y: 0
+            width: Math.min(appLabel.implicitWidth + 18, 148)
+            height: menuRow.height
 
             readonly property bool interactive: globalMenuPane.appMenuNode !== null
             readonly property bool selected: menuOverlay.isOpen
@@ -399,7 +438,7 @@ Pane {
                 color: "white"
                 elide: Text.ElideRight
                 font.family: "Google Sans Flex"
-                font.pixelSize: 15
+                font.pixelSize: 16
                 font.weight: 650
             }
 
@@ -428,9 +467,9 @@ Pane {
                 readonly property var menuEntry: modelData
 
                 visible: modelData && modelData.visible !== false && modelData.type !== "separator"
-                y: 1
-                width: visible ? Math.min(menuLabel.implicitWidth + 16, 116) : 0
-                height: menuRow.height - 1
+                y: 0
+                width: visible ? Math.min(menuLabel.implicitWidth + 18, 116) : 0
+                height: menuRow.height
 
                 readonly property bool itemEnabled: modelData && modelData.enabled !== false
                 readonly property bool selected: menuOverlay.isOpen
@@ -465,7 +504,7 @@ Pane {
                     color: menuButton.itemEnabled ? "white" : "#78ffffff"
                     elide: Text.ElideRight
                     font.family: "Google Sans Flex"
-                    font.pixelSize: 15
+                    font.pixelSize: 16
                     font.weight: 500
                 }
 

@@ -16,6 +16,14 @@ PanelWindow {
     readonly property bool isOpen: visible
     readonly property var currentMenu: menuStack.length > 0 ? menuStack[menuStack.length - 1] : null
     readonly property var currentItems: currentMenu && currentMenu.children ? currentMenu.children : []
+    readonly property bool currentMenuHasIcons: {
+        for (let i = 0; i < root.currentItems.length; i++) {
+            const item = root.currentItems[i];
+            if (item && item.visible !== false && item.icon_name)
+                return true;
+        }
+        return false;
+    }
     readonly property bool canGoBack: menuStack.length > 1
     readonly property int menuWidth: 268
 
@@ -56,7 +64,7 @@ PanelWindow {
         root.menuStack = [menuItem];
         const availableWidth = root.hostWindow ? root.hostWindow.width : root.width;
         root.menuX = Math.max(8, Math.min(availableWidth - root.menuWidth - 8, localX));
-        root.menuY = Math.max(30, localY + anchorItem.height + 3);
+        root.menuY = Math.max(30, localY + anchorItem.height + 8);
         root.visible = true;
         menuViewport.contentY = 0;
     }
@@ -92,7 +100,7 @@ PanelWindow {
         for (let i = 0; i < root.currentItems.length; i++) {
             const item = root.currentItems[i];
             if (item && item.visible !== false)
-                value += item.type === "separator" ? 8 : 30;
+                value += item.type === "separator" ? 8 : 32;
         }
         return value;
     }
@@ -172,12 +180,12 @@ PanelWindow {
                     id: backRow
                     visible: root.canGoBack
                     width: parent.width
-                    height: visible ? 30 : 0
+                    height: visible ? 32 : 0
 
                     Rectangle {
                         anchors.fill: parent
                         radius: 7
-                        color: backMouse.containsMouse ? "#1fffffff" : "transparent"
+                        color: backMouse.containsMouse ? "#663b82f6" : "transparent"
 
                     }
 
@@ -223,7 +231,7 @@ PanelWindow {
                         color: "#e6ffffff"
                         elide: Text.ElideRight
                         font.family: "Google Sans Flex"
-                        font.pixelSize: 14
+                        font.pixelSize: 15
                         font.weight: 600
                     }
 
@@ -241,13 +249,14 @@ PanelWindow {
                     width: parent.width - 18
                     height: visible ? 1 : 0
                     anchors.horizontalCenter: parent.horizontalCenter
-                    color: "#2affffff"
+                    color: "transparent"
                 }
 
                 Repeater {
                     model: root.currentItems
 
                     delegate: AppMenuRow {
+                        reserveIconSpace: root.currentMenuHasIcons
                         onClicked: function(item) {
                             root.close();
                             root.itemActivated(item);

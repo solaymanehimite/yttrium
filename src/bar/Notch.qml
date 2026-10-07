@@ -1,405 +1,432 @@
 import Quickshell
+import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Wayland
 
-import qs.src.bar.notch_widgets
 import qs.src.bar.notch_modes
 import qs.src.services
 
-PopupWindow {
+// One top-surface with two states: a transient OSD and an expandable menu.
+PanelWindow {
     id: notch
 
-    anchor.window: bar
-    anchor.rect.x: bar.width / 2 - width / 2
-    anchor.rect.y: 0
-
-    // The notch has three intentional resting states: compact, a small
-    // hover lift, and a full control surface after a click.
-    property real showcaseScale: 1.0
-    property bool hovered: false
-    property bool expanded: false
-    property real targetWidth: expanded ? 500 : (hovered ? 412 : (osdActive ? 320 : 400))
-    property real targetHeight: expanded ? 210 : (hovered ? 33 : 30)
-
-    // Keep the popup window stable. Only the visible panel morphs, which is
-    // the same animation strategy as the original notch and avoids compositor
-    // relayout glitches while the pointer is over it.
-    implicitWidth: 560
-    implicitHeight: 250
-
-    property bool osdActive: osdMode !== ""
-    property string osdMode: "" // "", "volume", "brightness"
-    property bool _ready: false
-    property bool multipadSuppressExternalOsd: false
-
+    screen: bar.screen
+    // Keep the layer surface mapped. Only the launcher content is shown or
+    // hidden, so opening does not pay the cost of remapping a full-screen
+    // Wayland surface.
     visible: true
     color: "transparent"
 
-    // Auto-hide the OSD shortly after the last change.
-    Timer {
-        id: hideTimer
-        interval: 800
-        repeat: false
-        onTriggered: notch.osdMode = ""
+    anchors {
+        top: true
+        bottom: true
+        left: true
+        right: true
     }
 
-    Timer {
-        id: multipadGuard
-        interval: 1000
-        repeat: false
-        onTriggered: notch.multipadSuppressExternalOsd = false
-    }
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: menuOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    WlrLayershell.exclusionMode: ExclusionMode.Ignore
+    WlrLayershell.namespace: "quickshell-notch-launcher"
 
-    function poke(mode) {
-        if (!notch._ready || notch.multipadSuppressExternalOsd)
+    readonly property int menuWidth: 420
+    property string searchQuery: ""
+    property int selectedIndex: 0
+    readonly property var launcherEntries: {
+        const query = notch.searchQuery.trim().toLowerCase();
+        const entries = DesktopEntries.applications.values || [];
+        return entries.filter(entry => entry && !entry.noDisplay
+                && (!query || String(entry.name).toLowerCase().includes(query)))
+            .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    }
+    readonly property int menuHeight: Math.max(94,
+        Math.min(360, 58 + Math.max(1, launcherEntries.length) * 36))
+    property string osdMode: ""
+    property bool displaying: false
+    property bool osdClosing: false
+    property bool menuOpen: false
+    property bool menuOpening: false
+    property bool menuClosing: false
+    property bool morphingFromOsd: false
+
+    onMenuOpenChanged: {
+        if (menuOpen) {
+            selectedIndex = 0;
+            Qt.callLater(function() { searchInput.forceActiveFocus(); });
+        }
+    }
+    property bool transitioning: false
+    readonly property bool osdActive: osdMode !== ""
+    property bool ready: false
+    property bool suppressExternalOsd: false
+
+    function toggleMenu() {
+        scaleAnimation.stop();
+
+        if (notch.menuOpen || notch.menuOpening) {
+            // Keep the popup visible before changing the open state. This
+            // prevents a one-frame visible=false gap during the close.
+            notch.morphingFromOsd = false;
+            notch.menuClosing = true;
+            notch.menuOpening = false;
+            notch.menuOpen = false;
+            notch.transitioning = true;
+            verticalScale.yScale = 1;
+            menuAnimationTimer.restart();
             return;
-        notch.osdMode = mode;
-        hideTimer.restart();
-    }
-
-    function pokeMultipad(sliderIndex, value, delta, eventName) {
-        if (!notch._ready)
-            return;
-
-        if (eventName !== "volume" && eventName !== "brightness")
-            return;
-
-        notch.multipadSuppressExternalOsd = true;
-        multipadGuard.restart();
-
-        if (eventName === "volume") {
-            Audio.adjustRelative(delta);
-            notch.osdMode = "volume";
-        } else {
-            Brightness.adjustRelative(delta);
-            notch.osdMode = "brightness";
         }
-        hideTimer.restart();
+
+        hideTimer.stop();
+        exitTimer.stop();
+        notch.morphingFromOsd = notch.osdActive || notch.osdClosing || notch.displaying;
+        notch.osdMode = "";
+        notch.displaying = false;
+        notch.searchQuery = "";
+        notch.menuClosing = false;
+        notch.menuOpening = true;
+        notch.transitioning = true;
+        notch.menuOpen = true;
+        // Let the height behavior below do the entrance animation. Scaling a
+        // full-screen layer is noticeably more expensive than resizing the
+        // small surface itself.
+        verticalScale.yScale = 1;
+        menuAnimationTimer.restart();
     }
 
-    Component.onCompleted: _initTimer.start()
+    IpcHandler {
+        target: "notch"
 
-    Timer {
-        id: _initTimer
-        interval: 800
-        repeat: false
-        onTriggered: notch._ready = true
-    }
-
-    Connections {
-        target: Audio
-        function onVolumeChanged() {
-            if (!notch.multipadSuppressExternalOsd)
-                poke("volume");
-        }
-        function onMutedChanged() {
-            if (!notch.multipadSuppressExternalOsd)
-                poke("volume");
-        }
-    }
-
-    Connections {
-        target: Brightness
-        function onBrightnessChanged() {
-            if (!notch.multipadSuppressExternalOsd)
-                poke("brightness");
-        }
-    }
-
-    Connections {
-        target: MultiPad
-        function onSliderChanged(sliderIndex, value, delta, eventName) {
-            notch.pokeMultipad(sliderIndex, value, delta, eventName);
+        function toggleMenu(): void {
+            notch.toggleMenu();
         }
     }
 
     property string volumeIcon: {
         if (Audio.muted)
             return Icon.getPath("volume/volume_muted_red");
-        const v = Audio.volume ?? 0;
-        if (v < 0.33)
+        if (Audio.volume < 0.33)
             return Icon.getPath("volume/volume_low");
-        if (v < 0.66)
+        if (Audio.volume < 0.66)
             return Icon.getPath("volume/volume_medium");
         return Icon.getPath("volume/volume_high");
     }
-    property string volumeText: Math.round((Audio.volume ?? 0) * 100)
     property real volumeFrac: Audio.volume ?? 0
+    property real brightnessFrac: Math.max(0, Math.min(1, Brightness.brightness || 0))
 
-    property real brightnessFrac: {
-        const b = Brightness.brightness;
-        if (isNaN(b) || b === undefined || b === null)
-            return 0;
-        return Math.max(0, Math.min(1, b));
-    }
-    property string brightnessText: Math.round(brightnessFrac * 100)
+    function show(mode) {
+        if (!notch.ready || notch.suppressExternalOsd
+                || notch.menuOpen || notch.menuOpening || notch.menuClosing)
+            return;
 
-    readonly property int wifiPercent: {
-        const network = NetworkService.connectedNetwork;
-        if (!network)
-            return 0;
-        const strength = Number(network.signalStrength);
-        if (isNaN(strength))
-            return 0;
-        return Math.round(Math.max(0, Math.min(1, strength)) * 100);
-    }
-    readonly property string wifiValue: NetworkService.connectedNetwork
-        ? wifiPercent + "%"
-        : "Offline"
-    readonly property string wifiDetail: NetworkService.connectedNetwork
-        ? "Signal strength"
-        : (NetworkService.connectedDevice ? "Connected" : "Not connected")
+        const alreadyVisible = notch.displaying && notch.osdActive && !notch.osdClosing;
+        notch.osdMode = mode;
+        notch.displaying = true;
+        notch.osdClosing = false;
+        notch.menuClosing = false;
+        exitTimer.stop();
+        hideTimer.restart();
 
-    // A hidden instance keeps the existing network icon selection logic in one
-    // place, including wired and transitional network states.
-    Network {
-        id: wifiIconProbe
-        visible: false
-        width: 0
-        height: 0
+        // Value updates refresh the existing OSD; they must not replay its
+        // entrance animation every time volume or brightness changes.
+        if (alreadyVisible)
+            return;
+
+        scaleAnimation.stop();
+        verticalScale.yScale = 0.01;
+        Qt.callLater(function() {
+            if (notch.displaying && !notch.menuOpen && !notch.osdClosing) {
+                scaleAnimation.to = 1;
+                scaleAnimation.restart();
+            }
+        });
     }
 
-    Item {
-        id: surface
+    Timer {
+        id: readyTimer
+        interval: 600
+        running: true
+        onTriggered: notch.ready = true
+    }
+
+    Timer {
+        id: hideTimer
+        interval: 900
+        onTriggered: {
+            notch.osdClosing = true;
+            scaleAnimation.stop();
+            verticalScale.yScale = 1;
+            Qt.callLater(function() {
+                if (notch.osdClosing) {
+                    scaleAnimation.to = 0.01;
+                    scaleAnimation.restart();
+                }
+            });
+            exitTimer.start();
+        }
+    }
+
+    Timer {
+        id: menuAnimationTimer
+        interval: 220
+        onTriggered: {
+            notch.menuOpening = false;
+            notch.menuClosing = false;
+            notch.transitioning = false;
+        }
+    }
+
+    Timer {
+        id: exitTimer
+        interval: 220
+        onTriggered: {
+            notch.displaying = false;
+            notch.osdClosing = false;
+            notch.osdMode = "";
+            notch.transitioning = false;
+        }
+    }
+
+    Connections {
+        target: Audio
+        function onVolumeChanged() { notch.show("volume"); }
+        function onMutedChanged() { notch.show("volume"); }
+    }
+
+    Connections {
+        target: Brightness
+        function onBrightnessChanged() { notch.show("brightness"); }
+    }
+
+    MouseArea {
         anchors.fill: parent
+        visible: notch.menuOpen || notch.menuClosing
+        onClicked: notch.toggleMenu()
+    }
 
-        Rectangle {
-            id: panel
-            anchors.top: parent.top
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: notch.targetWidth
-            height: notch.targetHeight
-            z: 1
-            clip: true
-            color: "#000000"
-            border.width: 0
-            topLeftRadius: 0
-            topRightRadius: 0
-            bottomLeftRadius: notch.expanded ? 42 : height / 2
-            bottomRightRadius: notch.expanded ? 42 : height / 2
-            opacity: 0
-
-            Behavior on width {
-                NumberAnimation {
-                    duration: 280
-                    easing.type: Easing.OutCubic
-                }
-            }
-
-            Behavior on height {
-                NumberAnimation {
-                    duration: 300
-                    easing.type: Easing.OutCubic
-                }
-            }
-
-            MouseArea {
-                id: interaction
-                anchors.fill: parent
-                z: 0
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-
-                onEntered: notch.hovered = true
-                onExited: notch.hovered = false
-                onClicked: notch.expanded = !notch.expanded
-            }
-
-            Component.onCompleted: entrance.start()
-
+    Rectangle {
+        id: surface
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        width: notch.menuOpen || notch.menuOpening || notch.menuClosing
+            ? notch.menuWidth
+            : 300
+        Behavior on width {
+            enabled: notch.morphingFromOsd
             NumberAnimation {
-                id: entrance
-                target: panel
-                property: "opacity"
-                from: 0
-                to: 1
-                duration: 500
+                duration: 180
                 easing.type: Easing.OutCubic
             }
+        }
+        height: notch.menuOpen || notch.menuOpening
+            ? notch.menuHeight
+            : (notch.menuClosing
+                ? 0
+                : (notch.osdActive || notch.osdClosing ? 32 : 0))
+        radius: 0
+        topLeftRadius: 0
+        topRightRadius: 0
+        bottomLeftRadius: notch.menuOpen || notch.menuClosing ? 18 : height / 2
+        bottomRightRadius: notch.menuOpen || notch.menuClosing ? 18 : height / 2
+        color: "#000000"
+        clip: true
+        opacity: 1
 
-            RowLayout {
-                id: idleRow
-                anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 12
-                spacing: 15
-                opacity: !notch.expanded && !notch.osdActive ? 1 : 0
-                visible: opacity > 0.01
+        transform: Scale {
+            id: verticalScale
+            origin.x: surface.width / 2
+            origin.y: 0
+            xScale: 1
+            yScale: 0.82
+        }
 
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
+        NumberAnimation {
+            id: scaleAnimation
+            target: verticalScale
+            property: "yScale"
+            duration: 180
+            easing.type: Easing.OutCubic
+        }
+
+        Behavior on height {
+            NumberAnimation {
+                duration: 180
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        Column {
+            id: launcher
+            visible: notch.menuOpen || notch.menuOpening || notch.menuClosing
+            opacity: notch.menuOpen || notch.menuOpening ? 1 : 0
+            Behavior on opacity {
+                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            }
+            anchors {
+                top: parent.top
+                left: parent.left
+                right: parent.right
+                margins: 10
+            }
+            spacing: 4
+
+            TextInput {
+                id: searchInput
+                width: parent.width
+                height: 34
+                leftPadding: 12
+                rightPadding: 12
+                text: notch.searchQuery
+                color: "#f4f5f7"
+                selectionColor: "#557aa7"
+                clip: true
+                focus: notch.menuOpen
+                font.family: "Google Sans Flex"
+                font.pixelSize: 15
+                verticalAlignment: Text.AlignVCenter
+                onTextChanged: {
+                    notch.searchQuery = text;
+                    notch.selectedIndex = 0;
+                }
+                Keys.onPressed: function(event) {
+                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                        if (notch.launcherEntries.length > 0) {
+                            notch.launcherEntries[notch.selectedIndex].execute();
+                            notch.toggleMenu();
+                        }
+                        event.accepted = true;
+                    } else if (event.key === Qt.Key_Down) {
+                        const first = appListRepeater.itemAt(notch.selectedIndex);
+                        if (first)
+                            first.forceActiveFocus();
+                        event.accepted = true;
+                    } else if (event.key === Qt.Key_Escape) {
+                        notch.toggleMenu();
+                        event.accepted = true;
                     }
                 }
 
-                Clock {}
-                Item {
-                    Layout.fillWidth: true
-                }
-                Volume {
-                    source: notch.volumeIcon
-                    rasterScale: notch.showcaseScale
-                }
-                Network {
-                    rasterScale: notch.showcaseScale
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Search applications"
+                    color: "#777e8b"
+                    visible: !searchInput.text
+                    font: searchInput.font
                 }
             }
 
             Item {
-                id: osdWrap
-                anchors.fill: parent
-                anchors.leftMargin: 14
-                anchors.rightMargin: 14
-                opacity: !notch.expanded && notch.osdActive ? 1 : 0
-                visible: opacity > 0.01
+                width: launcher.width
+                height: Math.max(40, notch.menuHeight - 48)
 
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
-                    }
-                }
-
-                OsdModal {
+                Flickable {
+                    id: appListViewport
                     anchors.fill: parent
-                    visible: notch.osdMode !== "multipad"
-                    iconSource: notch.osdMode === "brightness" ? Icon.getPath("sun") : notch.volumeIcon
-                    title: notch.osdMode === "brightness" ? "Brightness" : (Audio.muted ? "Muted" : "Volume")
-                    value: notch.osdMode === "brightness" ? notch.brightnessFrac : notch.volumeFrac
-                    displayText: notch.osdMode === "brightness" ? notch.brightnessText : notch.volumeText
-                    statusIconSource: ""
-                    muted: notch.osdMode === "volume" && Audio.muted
-                    rasterScale: notch.showcaseScale
-                }
-            }
+                    clip: true
+                    contentWidth: width
+                    contentHeight: appListColumn.implicitHeight
+                    interactive: contentHeight > height
+                    boundsBehavior: Flickable.StopAtBounds
 
-            Item {
-                id: expandedContent
-                anchors.fill: parent
-                opacity: notch.expanded ? 1 : 0
-                visible: opacity > 0.01
+                    Column {
+                    id: appListColumn
+                    width: parent.width
 
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 220
-                        easing.type: Easing.OutCubic
-                    }
-                }
+                    Repeater {
+                        id: appListRepeater
+                        model: notch.launcherEntries
 
-                Item {
-                    id: clockSection
-                    x: 18
-                    y: 16
-                    width: 230
-                    height: 162
-
-                    Text {
-                        id: monthLabel
-                        anchors.top: parent.top
-                        anchors.left: parent.left
-                        anchors.leftMargin: 4
-                        text: Time.monthYear
-                        color: "#f6f8fb"
-                        font.family: "Google Sans Flex"
-                        font.pixelSize: 15
-                        font.weight: Font.Medium
-                    }
+                        delegate: Rectangle {
+                            required property var modelData
+                            required property int index
+                            width: appListColumn.width
+                            height: 36
+                            radius: 9
+                            color: activeFocus ? "#263b82f6"
+                                : (launcherMouse.containsMouse ? "#263b82f6" : "transparent")
 
                     Row {
-                        anchors.top: monthLabel.bottom
-                        anchors.topMargin: 10
-                        width: parent.width
-                        height: 16
-                        spacing: 0
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        spacing: 10
 
-                        Repeater {
-                            model: ["S", "M", "T", "W", "T", "F", "S"]
+                        Image {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 20
+                            height: 20
+                            source: Quickshell.iconPath(modelData.icon, true)
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: true
+                            smooth: true
+                        }
 
-                            Text {
-                                width: 30
-                                height: 16
-                                text: modelData
-                                horizontalAlignment: Text.AlignHCenter
-                                color: "#727b89"
-                                font.family: "Google Sans Flex"
-                                font.pixelSize: 11
-                                font.weight: Font.Medium
-                            }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - 30
+                            text: String(modelData.name || modelData.id)
+                            color: "#f4f5f7"
+                            elide: Text.ElideRight
+                            font.family: "Google Sans Flex"
+                            font.pixelSize: 15
                         }
                     }
 
-                    Grid {
-                        anchors.top: monthLabel.bottom
-                        anchors.topMargin: 30
-                        width: parent.width
-                        columns: 7
-                        rowSpacing: 2
-                        columnSpacing: 0
-
-                        Repeater {
-                            model: 42
-
-                            Item {
-                                id: dayCell
-                                property int calendarDay: index - new Date(Time.year, Time.month, 1).getDay() + 1
-                                property bool isCurrentDay: calendarDay === Time.day
-                                width: 30
-                                height: 22
-                                visible: calendarDay > 0 && calendarDay <= new Date(Time.year, Time.month + 1, 0).getDate()
-
-                                Rectangle {
-                                    anchors.centerIn: parent
-                                    width: 22
-                                    height: 22
-                                    radius: width / 2
-                                    color: dayCell.isCurrentDay ? "#f6f8fb" : "transparent"
+                            Keys.onPressed: function(event) {
+                                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                    modelData.execute();
+                                    notch.toggleMenu();
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Down) {
+                                    notch.selectedIndex = Math.min(
+                                        notch.launcherEntries.length - 1,
+                                        notch.selectedIndex + 1);
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Up) {
+                                    notch.selectedIndex = Math.max(0, notch.selectedIndex - 1);
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Escape) {
+                                    notch.toggleMenu();
+                                    event.accepted = true;
                                 }
+                            }
 
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: dayCell.calendarDay
-                                    color: dayCell.isCurrentDay ? "#111318" : "#c1c7d0"
-                                    font.family: "Google Sans Flex"
-                                    font.pixelSize: 12
-                                    font.weight: dayCell.isCurrentDay ? Font.Medium : Font.Normal
+                            MouseArea {
+                                id: launcherMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    modelData.execute();
+                                    notch.toggleMenu();
                                 }
                             }
                         }
                     }
-                }
-
-                Column {
-                    id: statsColumn
-                    x: 252
-                    y: 18
-                    width: parent.width - x - 18
-                    spacing: 2
-
-                    StatusPill {
-                        width: statsColumn.width
-                        height: 56
-                        title: "Wi-Fi"
-                        detail: notch.wifiDetail
-                        value: notch.wifiValue
-                        iconSource: Icon.getPath(wifiIconProbe.currentIcon)
-                        accentColor: "#f6f8fb"
-                        showProgress: false
-                    }
-
-                    StatusPill {
-                        width: statsColumn.width
-                        height: 56
-                        title: "Volume"
-                        detail: Audio.muted ? "Output muted" : "System output"
-                        value: Audio.muted ? "Muted" : notch.volumeText + "%"
-                        iconSource: notch.volumeIcon
-                        accentColor: "#f6f8fb"
-                        progress: Audio.muted ? 0 : notch.volumeFrac
                     }
                 }
 
+            }
+        }
 
+        OsdModal {
+            anchors {
+                top: parent.top
+                left: parent.left
+                right: parent.right
+                leftMargin: 12
+                rightMargin: 12
+            }
+            height: 32
+            iconSource: notch.osdMode === "brightness" ? Icon.getPath("sun") : notch.volumeIcon
+            title: notch.osdMode === "brightness" ? "Brightness" : (Audio.muted ? "Muted" : "Volume")
+            value: notch.osdMode === "brightness" ? notch.brightnessFrac : notch.volumeFrac
+            muted: notch.osdMode === "volume" && Audio.muted
+            opacity: notch.osdActive && !notch.menuOpen ? 1 : 0
+            Behavior on opacity {
+                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
             }
         }
     }

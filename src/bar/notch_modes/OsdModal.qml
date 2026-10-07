@@ -1,9 +1,10 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 
 // Generic OSD row shown inside the notch when volume / brightness changes.
 // Same 30px height as the idle notch. Left: icon + name.
-// Right: small slider track + fixed-width value text (no relayout as % changes).
+// Right: a small slider track.
 RowLayout {
     id: root
 
@@ -11,8 +12,6 @@ RowLayout {
     property real rasterScale: 1.0
     property string title: ""
     property real value: 0 // 0..1, clamped for the bar
-    property string displayText: ""
-    property string statusIconSource: ""
     property bool muted: false
     readonly property int fadeDuration: 150
 
@@ -55,11 +54,16 @@ RowLayout {
         Layout.alignment: Qt.AlignVCenter
         smooth: true
         asynchronous: true
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            colorization: 1
+            colorizationColor: "#ffffff"
+        }
     }
 
     Text {
         text: root.title
-        color: "white"
+        color: "#ffffff"
         Layout.alignment: Qt.AlignVCenter
         font.family: "Google Sans Flex"
         font.pixelSize: 14
@@ -86,58 +90,7 @@ RowLayout {
             width: Math.round(track.width * root.smoothValue)
             height: parent.height
             radius: 2.5
-            color: "white"
-        }
-    }
-
-    Item {
-        Layout.alignment: Qt.AlignVCenter
-        Layout.preferredWidth: root.muted ? 0 : 40
-        Layout.preferredHeight: 16
-        Behavior on Layout.preferredWidth {
-            NumberAnimation {
-                duration: root.fadeDuration
-                easing.type: Easing.OutCubic
-            }
-        }
-
-        Image {
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            width: 10
-            height: 10
-            sourceSize.width: 10 * root.rasterScale
-            sourceSize.height: 10 * root.rasterScale
-            source: root.statusIconSource
-            opacity: root.statusIconSource === "" ? 0 : 1
-            smooth: true
-            asynchronous: true
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: root.fadeDuration
-                    easing.type: Easing.OutCubic
-                }
-            }
-        }
-
-        Text {
-            anchors.fill: parent
-            text: root.displayText
-            color: "white"
-            opacity: root.muted ? 0 : 1
-            horizontalAlignment: Text.AlignRight
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
-            font.family: "Google Sans Flex"
-            font.pixelSize: 13
-            font.weight: 500
-            font.features: { "tnum": 1 }
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: root.fadeDuration
-                    easing.type: Easing.OutCubic
-                }
-            }
+            color: "#ffffff"
         }
     }
 }

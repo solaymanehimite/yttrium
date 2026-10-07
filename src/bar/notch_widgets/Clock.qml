@@ -5,13 +5,13 @@ import qs.src.services
 // Time digits use tabular figures so the width is identical every second
 // (no more wobble from proportional digits). No dummy-text hack needed.
 RowLayout {
-    spacing: 6
+    spacing: 8
 
     TextMetrics {
         id: clockWidth
         text: "00:00"
         font.family: "Google Sans Flex"
-        font.pixelSize: 16
+        font.pixelSize: 14
         font.weight: Font.Medium
         font.features: { "tnum": 1 }
     }
@@ -24,7 +24,7 @@ RowLayout {
         text: Time.time
         color: "white"
         font.family: "Google Sans Flex"
-        font.pixelSize: 16
+        font.pixelSize: 14
         font.weight: Font.Medium
         font.features: { "tnum": 1 }
     }
@@ -32,9 +32,9 @@ RowLayout {
     Text {
         Layout.alignment: Qt.AlignVCenter
         text: Time.date
-        color: "#aaaaaa"
+        color: "white"
         font.family: "Google Sans Flex"
         font.pixelSize: 14
-        font.weight: Font.Normal
+        font.weight: Font.Medium
     }
 }

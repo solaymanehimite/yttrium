@@ -7,6 +7,7 @@ Item {
     id: row
 
     required property var modelData
+    property bool reserveIconSpace: false
 
     signal clicked(var item)
     signal submenuRequested(var item)
@@ -20,7 +21,7 @@ Item {
 
     visible: !modelData || modelData.visible !== false
     width: parent ? parent.width : 0
-    height: isSeparator ? 8 : 30
+    height: isSeparator ? 8 : 32
 
     Accessible.role: isSeparator ? Accessible.Separator : Accessible.MenuItem
     Accessible.name: isSeparator ? "" : String(modelData.label || "").replace(/_/g, "")
@@ -31,14 +32,15 @@ Item {
         anchors.centerIn: parent
         width: parent.width - 18
         height: 1
-        color: "#2affffff"
+        // Separators are spacing only; do not draw a rule.
+        color: "transparent"
     }
 
     Rectangle {
         visible: !row.isSeparator
         anchors.fill: parent
         radius: 7
-        color: rowMouse.containsMouse && row.isEnabled ? "#1fffffff" : "transparent"
+        color: rowMouse.containsMouse && row.isEnabled ? "#663b82f6" : "transparent"
         opacity: row.isEnabled ? 1 : 0.48
 
         RowLayout {
@@ -102,7 +104,8 @@ Item {
             }
 
             Item {
-                Layout.preferredWidth: 15
+                visible: row.reserveIconSpace
+                Layout.preferredWidth: visible ? 15 : 0
                 Layout.preferredHeight: 15
                 Layout.alignment: Qt.AlignVCenter
 
@@ -129,7 +132,7 @@ Item {
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
                 font.family: "Google Sans Flex"
-                font.pixelSize: 14
+                font.pixelSize: 15
                 font.weight: 500
             }
 

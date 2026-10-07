@@ -4,6 +4,8 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 
+import qs.src.services
+
 Singleton {
     id: multipad
 
@@ -36,8 +38,16 @@ Singleton {
         multipad.sliderIndex = zone + 1;
         multipad.value = Math.max(0, Math.min(1, nextValue));
         multipad.delta = nextDelta;
-        multipad.eventName = payload.event || "slider";
-        multipad.focusedApp = payload.focused_app || "";
+        multipad.eventName = String(payload.event || "slider");
+        multipad.focusedApp = String(payload.focused_app || "");
+
+        // cleartouchd sends relative, normalized deltas. Apply those to the
+        // real system controls rather than treating its value as absolute.
+        if (multipad.eventName === "volume")
+            Audio.adjustRelative(nextDelta);
+        else if (multipad.eventName === "brightness")
+            Brightness.adjustRelative(nextDelta);
+
         multipad.sliderChanged(
             multipad.sliderIndex,
             multipad.value,
