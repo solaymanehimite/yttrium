@@ -12,9 +12,9 @@ PanelWindow {
     id: notch
 
     screen: bar.screen
-    // Keep the layer surface mapped. Only the launcher content is shown or
-    // hidden, so opening does not pay the cost of remapping a full-screen
-    // Wayland surface.
+    // Keep the layer surface alive. When idle it sits below normal windows,
+    // so it cannot steal pointer input. Bringing it to the overlay only
+    // happens while the OSD or launcher is active.
     visible: true
     color: "transparent"
 
@@ -25,7 +25,8 @@ PanelWindow {
         right: true
     }
 
-    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.layer: menuOpen || menuClosing || displaying || osdClosing || transitioning
+        ? WlrLayer.Overlay : WlrLayer.Bottom
     WlrLayershell.keyboardFocus: menuOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.namespace: "quickshell-notch-launcher"
@@ -49,6 +50,7 @@ PanelWindow {
     property bool menuOpening: false
     property bool menuClosing: false
     property bool morphingFromOsd: false
+    property bool osdTransitioning: false
 
     onMenuOpenChanged: {
         if (menuOpen) {
@@ -68,6 +70,7 @@ PanelWindow {
             // Keep the popup visible before changing the open state. This
             // prevents a one-frame visible=false gap during the close.
             notch.morphingFromOsd = false;
+            notch.osdTransitioning = false;
             notch.menuClosing = true;
             notch.menuOpening = false;
             notch.menuOpen = false;
@@ -80,7 +83,9 @@ PanelWindow {
         hideTimer.stop();
         exitTimer.stop();
         notch.morphingFromOsd = notch.osdActive || notch.osdClosing || notch.displaying;
-        notch.osdMode = "";
+        notch.osdTransitioning = notch.morphingFromOsd;
+        if (!notch.morphingFromOsd)
+            notch.osdMode = "";
         notch.displaying = false;
         notch.searchQuery = "";
         notch.menuClosing = false;
@@ -100,6 +105,24 @@ PanelWindow {
         function toggleMenu(): void {
             notch.toggleMenu();
         }
+    }
+
+    // Avoid starting the `qs` CLI for every keypress. Niri writes to this
+    // long-lived FIFO, and the listener forwards the event directly here.
+    Process {
+        id: toggleListener
+        command: ["python3", Quickshell.shellDir + "/scripts/notch-toggle-listener.py"]
+        running: true
+        stdout: SplitParser {
+            onRead: notch.toggleMenu()
+        }
+        onExited: restartToggle.start()
+    }
+
+    Timer {
+        id: restartToggle
+        interval: 1000
+        onTriggered: toggleListener.running = true
     }
 
     property string volumeIcon: {
@@ -258,9 +281,18 @@ PanelWindow {
         Column {
             id: launcher
             visible: notch.menuOpen || notch.menuOpening || notch.menuClosing
-            opacity: notch.menuOpen || notch.menuOpening ? 1 : 0
+            readonly property real revealProgress: {
+                if (!notch.morphingFromOsd || !notch.menuOpen)
+                    return notch.menuOpen || notch.menuOpening ? 1 : 0;
+                return Math.max(0, Math.min(1,
+                    (surface.height - 32) / Math.max(1, notch.menuHeight - 32)));
+            }
+            opacity: revealProgress
             Behavior on opacity {
-                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                NumberAnimation {
+                    duration: notch.morphingFromOsd ? 0 : 140
+                    easing.type: Easing.OutCubic
+                }
             }
             anchors {
                 top: parent.top
@@ -424,9 +456,23 @@ PanelWindow {
             title: notch.osdMode === "brightness" ? "Brightness" : (Audio.muted ? "Muted" : "Volume")
             value: notch.osdMode === "brightness" ? notch.brightnessFrac : notch.volumeFrac
             muted: notch.osdMode === "volume" && Audio.muted
-            opacity: notch.osdActive && !notch.menuOpen ? 1 : 0
+            opacity: notch.osdActive
+                ? (notch.morphingFromOsd && notch.menuOpen
+                    ? 1 - launcher.revealProgress
+                    : (!notch.menuOpen ? 1 : 0))
+                : 0
+            onOpacityChanged: {
+                if (notch.menuOpen && notch.osdTransitioning && opacity < 0.01) {
+                    notch.osdTransitioning = false;
+                    notch.osdMode = "";
+                    notch.osdClosing = false;
+                }
+            }
             Behavior on opacity {
-                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                NumberAnimation {
+                    duration: notch.morphingFromOsd ? 0 : 140
+                    easing.type: Easing.OutCubic
+                }
             }
         }
     }
