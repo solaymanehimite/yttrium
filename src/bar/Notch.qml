@@ -2,6 +2,7 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import Quickshell.Wayland
 
 import qs.src.bar.notch_modes
@@ -31,18 +32,40 @@ PanelWindow {
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.namespace: "quickshell-notch-launcher"
 
-    readonly property int menuWidth: 420
     property string searchQuery: ""
+    property string launcherMode: "apps"
     property int selectedIndex: 0
+    property int wallpaperIndex: 0
+    property bool modeTransitioning: false
+    readonly property int menuWidth: launcherMode === "wallpapers" ? 760 : 420
+    readonly property bool actionSearch: notch.searchQuery.startsWith(">")
     readonly property var launcherEntries: {
         const query = notch.searchQuery.trim().toLowerCase();
+        if (query.startsWith(">")) {
+            const actionQuery = query.slice(1).trim();
+            const actions = [{
+                name: "Wallpapers",
+                isWallpaperAction: true
+            }];
+            return actions.filter(action => !actionQuery
+                || action.name.toLowerCase().includes(actionQuery));
+        }
+
         const entries = DesktopEntries.applications.values || [];
-        return entries.filter(entry => entry && !entry.noDisplay
-                && (!query || String(entry.name).toLowerCase().includes(query)))
-            .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+        const apps = entries.filter(entry => entry && !entry.noDisplay
+                && (!query || String(entry.name).toLowerCase().includes(query)));
+        const action = {
+            name: "Actions",
+            isActionPrefix: true
+        };
+        if (!query || action.name.toLowerCase().includes(query))
+            apps.push(action);
+        return apps.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     }
-    readonly property int menuHeight: Math.max(94,
-        Math.min(360, 58 + Math.max(1, launcherEntries.length) * 36))
+    readonly property int menuHeight: launcherMode === "wallpapers"
+        ? 280
+        : Math.max(94, Math.min(360,
+            58 + Math.max(1, launcherEntries.length) * 36))
     property string osdMode: ""
     property bool displaying: false
     property bool osdClosing: false
@@ -62,6 +85,8 @@ PanelWindow {
     readonly property bool osdActive: osdMode !== ""
     property bool ready: false
     property bool suppressExternalOsd: false
+
+    Component.onCompleted: refreshWallpapers()
 
     function toggleMenu() {
         scaleAnimation.stop();
@@ -88,6 +113,8 @@ PanelWindow {
             notch.osdMode = "";
         notch.displaying = false;
         notch.searchQuery = "";
+        notch.launcherMode = "apps";
+        notch.modeTransitioning = false;
         notch.menuClosing = false;
         notch.menuOpening = true;
         notch.transitioning = true;
@@ -123,6 +150,82 @@ PanelWindow {
         id: restartToggle
         interval: 1000
         onTriggered: toggleListener.running = true
+    }
+
+    property var wallpapers: []
+
+    function refreshWallpapers() {
+        wallpaperScan.running = true;
+    }
+
+    function openWallpaperMode() {
+        if (wallpapers.length === 0)
+            refreshWallpapers();
+        modeTransitioning = true;
+        launcherMode = "wallpapers";
+        wallpaperIndex = Math.max(0, Math.min(wallpaperIndex, wallpapers.length - 1));
+        modeAnimationTimer.restart();
+        Qt.callLater(function() {
+            wallpaperPanel.forceActiveFocus();
+            wallpaperView.currentIndex = notch.wallpaperIndex;
+        });
+    }
+
+    function closeWallpaperMode() {
+        modeTransitioning = true;
+        launcherMode = "apps";
+        searchQuery = "";
+        modeAnimationTimer.restart();
+        Qt.callLater(function() { searchInput.forceActiveFocus(); });
+    }
+
+    function openActionSearch() {
+        searchInput.text = ">";
+        searchInput.forceActiveFocus();
+        selectedIndex = 0;
+    }
+
+    function wallpaperAt(offset) {
+        if (wallpapers.length === 0)
+            return "";
+        return wallpapers[(wallpaperIndex + offset + wallpapers.length) % wallpapers.length];
+    }
+
+    function applyWallpaper() {
+        if (wallpaperIndex < 0 || wallpaperIndex >= wallpapers.length)
+            return;
+        wallpaperApply.exec([
+            "awww", "img", wallpapers[wallpaperIndex],
+            "--transition-type", "grow",
+            "--transition-pos", "0.5,0.75",
+            "--transition-duration", "0.3"
+        ]);
+    }
+
+    Process {
+        id: wallpaperScan
+        command: ["find", Quickshell.env("HOME") + "/Pictures/Wallpapers", "-type", "f"]
+        stdout: StdioCollector {
+            id: wallpaperOutput
+            onStreamFinished: {
+                const values = wallpaperOutput.text.trim().split("\n").filter(path =>
+                    /\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(path));
+                values.sort();
+                notch.wallpapers = values;
+                notch.wallpaperIndex = Math.max(0,
+                    Math.min(notch.wallpaperIndex, values.length - 1));
+            }
+        }
+    }
+
+    Process {
+        id: wallpaperApply
+    }
+
+    Timer {
+        id: modeAnimationTimer
+        interval: 220
+        onTriggered: notch.modeTransitioning = false
     }
 
     property string volumeIcon: {
@@ -235,7 +338,7 @@ PanelWindow {
             ? notch.menuWidth
             : 300
         Behavior on width {
-            enabled: notch.morphingFromOsd
+            enabled: notch.morphingFromOsd || notch.modeTransitioning
             NumberAnimation {
                 duration: 180
                 easing.type: Easing.OutCubic
@@ -280,7 +383,8 @@ PanelWindow {
 
         Column {
             id: launcher
-            visible: notch.menuOpen || notch.menuOpening || notch.menuClosing
+            visible: (notch.menuOpen || notch.menuOpening || notch.menuClosing)
+                && notch.launcherMode === "apps"
             readonly property real revealProgress: {
                 if (!notch.morphingFromOsd || !notch.menuOpen)
                     return notch.menuOpen || notch.menuOpening ? 1 : 0;
@@ -323,14 +427,24 @@ PanelWindow {
                 Keys.onPressed: function(event) {
                     if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                         if (notch.launcherEntries.length > 0) {
-                            notch.launcherEntries[notch.selectedIndex].execute();
-                            notch.toggleMenu();
+                            const selected = notch.launcherEntries[notch.selectedIndex];
+                            if (selected.isActionPrefix)
+                                notch.openActionSearch();
+                            else if (selected.isWallpaperAction)
+                                notch.openWallpaperMode();
+                            else {
+                                selected.execute();
+                                notch.toggleMenu();
+                            }
                         }
                         event.accepted = true;
                     } else if (event.key === Qt.Key_Down) {
-                        const first = appListRepeater.itemAt(notch.selectedIndex);
-                        if (first)
-                            first.forceActiveFocus();
+                        notch.selectedIndex = Math.min(
+                            notch.launcherEntries.length - 1,
+                            notch.selectedIndex + 1);
+                        event.accepted = true;
+                    } else if (event.key === Qt.Key_Up) {
+                        notch.selectedIndex = Math.max(0, notch.selectedIndex - 1);
                         event.accepted = true;
                     } else if (event.key === Qt.Key_Escape) {
                         notch.toggleMenu();
@@ -376,7 +490,8 @@ PanelWindow {
                             width: appListColumn.width
                             height: 36
                             radius: 9
-                            color: activeFocus ? "#263b82f6"
+                            color: index === notch.selectedIndex || activeFocus
+                                ? "#263b82f6"
                                 : (launcherMouse.containsMouse ? "#263b82f6" : "transparent")
 
                     Row {
@@ -389,7 +504,11 @@ PanelWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 20
                             height: 20
-                            source: Quickshell.iconPath(modelData.icon, true)
+                            source: modelData.isWallpaperAction
+                                ? Icon.getPath("wallpaper")
+                                : (modelData.isActionPrefix
+                                    ? Icon.getPath("actions")
+                                    : Quickshell.iconPath(modelData.icon, true))
                             fillMode: Image.PreserveAspectFit
                             asynchronous: true
                             smooth: true
@@ -397,19 +516,34 @@ PanelWindow {
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width - 30
+                            width: modelData.isActionPrefix ? parent.width - 52 : parent.width - 30
                             text: String(modelData.name || modelData.id)
                             color: "#f4f5f7"
                             elide: Text.ElideRight
                             font.family: "Google Sans Flex"
                             font.pixelSize: 15
                         }
+
+                        Text {
+                            visible: modelData.isActionPrefix
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: ">"
+                            color: "#777e8b"
+                            font.family: "Google Sans Flex"
+                            font.pixelSize: 14
+                        }
                     }
 
                             Keys.onPressed: function(event) {
                                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                    modelData.execute();
-                                    notch.toggleMenu();
+                                    if (modelData.isActionPrefix)
+                                        notch.openActionSearch();
+                                    else if (modelData.isWallpaperAction)
+                                        notch.openWallpaperMode();
+                                    else {
+                                        modelData.execute();
+                                        notch.toggleMenu();
+                                    }
                                     event.accepted = true;
                                 } else if (event.key === Qt.Key_Down) {
                                     notch.selectedIndex = Math.min(
@@ -431,8 +565,14 @@ PanelWindow {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    modelData.execute();
-                                    notch.toggleMenu();
+                                    if (modelData.isActionPrefix)
+                                        notch.openActionSearch();
+                                    else if (modelData.isWallpaperAction)
+                                        notch.openWallpaperMode();
+                                    else {
+                                        modelData.execute();
+                                        notch.toggleMenu();
+                                    }
                                 }
                             }
                         }
@@ -440,6 +580,139 @@ PanelWindow {
                     }
                 }
 
+            }
+        }
+
+        Item {
+            id: wallpaperPanel
+            anchors.fill: parent
+            anchors.margins: 16
+            visible: notch.menuOpen && notch.launcherMode === "wallpapers"
+            focus: visible
+            opacity: visible ? 1 : 0
+            Behavior on opacity {
+                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            }
+
+            function move(delta) {
+                if (notch.wallpapers.length === 0)
+                    return;
+                if (delta < 0)
+                    wallpaperView.decrementCurrentIndex();
+                else if (delta > 0)
+                    wallpaperView.incrementCurrentIndex();
+            }
+
+            Keys.onPressed: function(event) {
+                if (event.key === Qt.Key_Left) {
+                    move(-1);
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Right) {
+                    move(1);
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    notch.applyWallpaper();
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Escape) {
+                    notch.closeWallpaperMode();
+                    event.accepted = true;
+                }
+            }
+
+            Text {
+                anchors.top: parent.top
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Wallpapers"
+                color: "#8e939d"
+                font.family: "Google Sans Flex"
+                font.pixelSize: 13
+                font.weight: 600
+            }
+
+            PathView {
+                id: wallpaperView
+                anchors.fill: parent
+                model: notch.wallpapers
+                pathItemCount: Math.min(5, count)
+                cacheItemCount: 6
+                snapMode: PathView.SnapToItem
+                preferredHighlightBegin: 0.5
+                preferredHighlightEnd: 0.5
+                highlightRangeMode: PathView.StrictlyEnforceRange
+                currentIndex: notch.wallpaperIndex
+
+                onCurrentIndexChanged: {
+                    if (currentIndex >= 0)
+                        notch.wallpaperIndex = currentIndex;
+                }
+
+                path: Path {
+                    startX: -220
+                    startY: wallpaperView.height / 2
+                    PathLine {
+                        x: wallpaperView.width / 2
+                        relativeY: 0
+                    }
+                    PathLine {
+                        x: wallpaperView.width + 220
+                        relativeY: 0
+                    }
+                }
+
+                delegate: Item {
+                    required property string modelData
+                    required property int index
+                    width: 220
+                    height: 155
+                    z: PathView.isCurrentItem ? 1 : 0
+                    scale: PathView.isCurrentItem ? 1.25 : 0.86
+                    opacity: PathView.onPath ? (PathView.isCurrentItem ? 1 : 0.45) : 0
+                    Behavior on scale {
+                        NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on opacity {
+                        NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
+                    }
+
+                    Rectangle {
+                        width: 180
+                        height: 130
+                        anchors.centerIn: parent
+                        radius: 12
+                        color: "#202329"
+                        clip: true
+
+                        Image {
+                            anchors.fill: parent
+                            source: "file://" + modelData
+                            fillMode: Image.PreserveAspectCrop
+                            sourceSize.width: 380
+                            sourceSize.height: 280
+                            asynchronous: true
+                            cache: true
+                            smooth: !wallpaperView.moving
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                wallpaperView.currentIndex = index;
+                                if (PathView.isCurrentItem)
+                                    notch.applyWallpaper();
+                            }
+                        }
+                    }
+                }
+            }
+
+            Text {
+                anchors.bottom: parent.bottom
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: notch.wallpapers.length > 0
+                    ? (notch.wallpaperIndex + 1) + " / " + notch.wallpapers.length
+                    : "No wallpapers found"
+                color: "#8e939d"
+                font.pixelSize: 12
             }
         }
 
