@@ -9,13 +9,27 @@ import qs.src.services
 RowLayout {
     id: indicators
 
+    signal controlCenterClicked()
+    required property var barWindow
+
     anchors.right: parent.right
     anchors.rightMargin: 16
     anchors.verticalCenter: parent.verticalCenter
     height: parent.height
     spacing: 16
 
-    // Left-to-right order: volume, Wi-Fi, battery, then the clock/date.
+    MouseArea {
+        anchors.fill: parent
+        anchors.margins: -6
+        cursorShape: Qt.PointingHandCursor
+        onClicked: indicators.controlCenterClicked()
+    }
+
+    // Left-to-right order: LocalSend, volume, Wi-Fi, battery, then the clock/date.
+    LocalSendIndicator {
+        hostWindow: indicators.barWindow
+    }
+
     Volume {
         source: {
             if (Audio.muted)

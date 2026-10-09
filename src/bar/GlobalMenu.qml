@@ -394,6 +394,7 @@ Pane {
     Row {
         id: menuRow
         x: 15
+        anchors.verticalCenter: parent.verticalCenter
         height: globalMenuPane.height
         spacing: 1
 
@@ -433,6 +434,7 @@ Pane {
                     leftMargin: 8
                     rightMargin: 8
                     verticalCenter: parent.verticalCenter
+                    verticalCenterOffset: 4
                 }
                 text: globalMenuPane.activeAppName
                 color: "white"
@@ -499,6 +501,7 @@ Pane {
                         leftMargin: 8
                         rightMargin: 8
                         verticalCenter: parent.verticalCenter
+                        verticalCenterOffset: 4
                     }
                     text: globalMenuPane.cleanLabel(menuButton.modelData ? menuButton.modelData.label : "")
                     color: menuButton.itemEnabled ? "white" : "#78ffffff"

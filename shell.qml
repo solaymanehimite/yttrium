@@ -31,8 +31,13 @@ PanelWindow {
     GlobalMenu {
         barWindow: bar
     }
-    RightIndicators {}
-    Notch {}
+    RightIndicators {
+        barWindow: bar
+        onControlCenterClicked: notch.openControlCenter()
+    }
+    Notch {
+        id: notch
+    }
     // Tray {}
 
 }
