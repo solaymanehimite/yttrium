@@ -2,16 +2,19 @@
 """Small LocalSend v2 bridge for the Quickshell menu-bar indicator."""
 
 import argparse
+import concurrent.futures
 import hashlib
 import http.client
 import json
 import mimetypes
+import ipaddress
 import os
 import random
 import select
 import socket
 import ssl
 import struct
+import tempfile
 import subprocess
 import sys
 import time
@@ -20,19 +23,62 @@ from urllib.parse import urlencode
 
 MULTICAST_ADDRESS = "224.0.0.167"
 DEFAULT_PORT = 53317
-DISCOVERY_TIMEOUT = 2.5
+DISCOVERY_TIMEOUT = 5.0
 
 
-def identity(port):
+_security_material = None
+
+
+def local_security_material():
+    global _security_material
+    if _security_material is not None:
+        return _security_material
+
+    candidates = [
+        os.path.expanduser(
+            "~/.var/app/org.localsend.localsend_app/data/"
+            "org.localsend.localsend_app/shared_preferences.json"
+        ),
+        os.path.expanduser(
+            "~/.local/share/org.localsend.localsend_app/shared_preferences.json"
+        ),
+    ]
+    for path in candidates:
+        try:
+            with open(path, encoding="utf-8") as source:
+                preferences = json.load(source)
+            raw = preferences.get("flutter.ls_security_context")
+            context = json.loads(raw) if raw else {}
+            certificate = context["certificate"]
+            private_key = context["privateKey"]
+            fingerprint = context.get("certificateHash") or ""
+            directory = tempfile.mkdtemp(prefix="quickshell-localsend-")
+            certificate_path = os.path.join(directory, "certificate.pem")
+            private_key_path = os.path.join(directory, "private-key.pem")
+            with open(certificate_path, "w", encoding="utf-8") as output:
+                output.write(certificate)
+            with open(private_key_path, "w", encoding="utf-8") as output:
+                output.write(private_key)
+            os.chmod(private_key_path, 0o600)
+            _security_material = (certificate_path, private_key_path, fingerprint)
+            return _security_material
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            continue
+
+    _security_material = None
+    return None
+
+
+def identity(port, protocol="http", fingerprint=None):
     return {
         "alias": socket.gethostname(),
         "version": "2.0",
         "deviceModel": "Linux",
         "deviceType": "desktop",
-        "fingerprint": uuid.uuid4().hex,
+        "fingerprint": fingerprint or uuid.uuid4().hex,
         "port": port,
-        "protocol": "http",
-        "download": False,
+        "protocol": protocol,
+        "download": True,
     }
 
 
@@ -98,6 +144,9 @@ def read_http_request(conn):
 
 def discover(timeout=DISCOVERY_TIMEOUT):
     devices = {}
+    material = local_security_material()
+    protocol = "https" if material else "http"
+    fingerprint = material[2] if material else None
     tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tcp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     tcp.bind(("0.0.0.0", 0))
@@ -111,13 +160,37 @@ def discover(timeout=DISCOVERY_TIMEOUT):
         udp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
     except (AttributeError, OSError):
         pass
-    udp.bind(("0.0.0.0", port))
-    udp.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
+
+    # LocalSend listens for announcements on the well-known multicast port.
+    # The old bridge bound the UDP socket to the random TCP port instead, so
+    # it could send announcements but never saw the devices' replies.
+    udp.bind(("0.0.0.0", DEFAULT_PORT))
+    local_addresses = local_ipv4_addresses()
+    if local_addresses:
+        for local_address in local_addresses:
+            membership = struct.pack(
+                "=4s4s",
+                socket.inet_aton(MULTICAST_ADDRESS),
+                socket.inet_aton(local_address),
+            )
+            udp.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership)
+        udp.setsockopt(
+            socket.IPPROTO_IP,
+            socket.IP_MULTICAST_IF,
+            socket.inet_aton(sorted(local_addresses)[0]),
+        )
+    else:
+        membership = struct.pack(
+            "=4sl", socket.inet_aton(MULTICAST_ADDRESS), socket.INADDR_ANY
+        )
+        udp.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership)
+    udp.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
     udp.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 1)
     udp.setblocking(False)
 
-    announcement = identity(port)
+    announcement = identity(port, protocol, fingerprint)
     announcement["announce"] = True
+    announcement["announcement"] = True
     payload = json.dumps(announcement).encode("utf-8")
     try:
         udp.sendto(payload, (MULTICAST_ADDRESS, DEFAULT_PORT))
@@ -126,8 +199,13 @@ def discover(timeout=DISCOVERY_TIMEOUT):
         udp.sendto(payload, (MULTICAST_ADDRESS, DEFAULT_PORT))
 
         deadline = time.monotonic() + timeout
+        next_announcement = time.monotonic() + 1.0
         while time.monotonic() < deadline:
-            remaining = max(0.01, deadline - time.monotonic())
+            now = time.monotonic()
+            if now >= next_announcement:
+                udp.sendto(payload, (MULTICAST_ADDRESS, DEFAULT_PORT))
+                next_announcement = now + 1.0
+            remaining = max(0.01, min(deadline - now, next_announcement - now))
             readable, _, _ = select.select([udp, tcp], [], [], remaining)
             for source in readable:
                 if source is udp:
@@ -141,6 +219,12 @@ def discover(timeout=DISCOVERY_TIMEOUT):
                 else:
                     try:
                         connection, address = tcp.accept()
+                        if material:
+                            server_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                            server_context.load_cert_chain(material[0], material[1])
+                            connection = server_context.wrap_socket(
+                                connection, server_side=True
+                            )
                         response = read_http_request(connection)
                         add_device(devices, response, address[0])
                         connection.sendall(
@@ -153,18 +237,36 @@ def discover(timeout=DISCOVERY_TIMEOUT):
         udp.close()
         tcp.close()
 
+    # Multicast is fast, but Wi-Fi isolation and some firewalls drop it.
+    # Match LocalSend's legacy HTTP fallback so the menu finds the same LAN
+    # devices as the full application.
+    if not devices:
+        scan_http(devices, announcement)
+
+    # The local LocalSend app may answer our announcement too. It is not a
+    # useful transfer target for this menu, so keep only remote addresses.
+    local_addresses = local_ipv4_addresses()
+    devices = {
+        key: device
+        for key, device in devices.items()
+        if device["host"] not in local_addresses
+    }
+
     return sorted(devices.values(), key=lambda device: device["alias"].lower())
 
 
-def connection(host, port, protocol):
+def connection(host, port, protocol, timeout=20):
     if protocol.lower() == "https":
         context = ssl._create_unverified_context()
-        return http.client.HTTPSConnection(host, port, timeout=20, context=context)
-    return http.client.HTTPConnection(host, port, timeout=20)
+        material = local_security_material()
+        if material:
+            context.load_cert_chain(material[0], material[1])
+        return http.client.HTTPSConnection(host, port, timeout=timeout, context=context)
+    return http.client.HTTPConnection(host, port, timeout=timeout)
 
 
-def post_json(host, port, protocol, path, body):
-    conn = connection(host, port, protocol)
+def post_json(host, port, protocol, path, body, timeout=20):
+    conn = connection(host, port, protocol, timeout)
     data = json.dumps(body).encode("utf-8")
     conn.request(
         "POST",
@@ -204,6 +306,7 @@ def upload_file(host, port, protocol, path, file_path):
 
 def send_files(args):
     files = []
+    temporary_paths = []
     for path in args.files:
         path = os.path.abspath(path)
         if not os.path.isfile(path):
@@ -224,7 +327,35 @@ def send_files(args):
             }
         )
 
-    sender = identity(0)
+    for index, text in enumerate(args.text, start=1):
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".txt", delete=False
+        ) as output:
+            output.write(text)
+            path = output.name
+        temporary_paths.append(path)
+        encoded = text.encode("utf-8")
+        files.append(
+            {
+                "path": path,
+                "id": uuid.uuid4().hex,
+                "fileName": "Shared text.txt" if index == 1
+                    else f"Shared text {index}.txt",
+                "size": len(encoded),
+                "fileType": "text/plain",
+                "sha256": hashlib.sha256(encoded).hexdigest(),
+            }
+        )
+
+    if not files:
+        raise RuntimeError("No files or text to send")
+
+    material = local_security_material()
+    sender = identity(
+        0,
+        "https" if material else "http",
+        material[2] if material else None,
+    )
     sender["alias"] = socket.gethostname()
     request = {
         "info": sender,
@@ -280,10 +411,101 @@ def send_files(args):
         if status < 200 or status >= 300:
             raise RuntimeError(f"Upload failed for {item['fileName']} ({status})")
 
+    for path in temporary_paths:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def local_ipv4_addresses():
+    try:
+        result = subprocess.run(
+            ["ip", "-j", "-4", "addr", "show", "scope", "global"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        interfaces = json.loads(result.stdout)
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return set()
+
+    return {
+        address["local"]
+        for interface in interfaces
+        for address in interface.get("addr_info", [])
+        if address.get("family") == "inet" and address.get("local")
+    }
+
+
+def local_network_hosts():
+    try:
+        result = subprocess.run(
+            ["ip", "-j", "-4", "addr", "show", "scope", "global"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        interfaces = json.loads(result.stdout)
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return []
+
+    hosts = set()
+    for interface in interfaces:
+        for address in interface.get("addr_info", []):
+            if address.get("family") != "inet":
+                continue
+            try:
+                network = ipaddress.ip_network(
+                    f"{address['local']}/{address['prefixlen']}", strict=False
+                )
+            except (KeyError, ValueError):
+                continue
+            # Avoid turning a discovery click into a huge scan on /16 or /8
+            # networks. LocalSend's normal LANs are /24 or smaller.
+            if network.num_addresses > 256:
+                network = ipaddress.ip_network(
+                    f"{address['local']}/24", strict=False
+                )
+            hosts.update(str(host) for host in network.hosts())
+            hosts.discard(address["local"])
+    return sorted(hosts)
+
+
+def scan_http(devices, announcement):
+    body = dict(announcement)
+    body.pop("announce", None)
+    body.pop("announcement", None)
+
+    def probe(host):
+        for protocol in ("https", "http"):
+            try:
+                status, response = post_json(
+                    host,
+                    DEFAULT_PORT,
+                    protocol,
+                    "/api/localsend/v2/register",
+                    body,
+                    timeout=0.35,
+                )
+                if 200 <= status < 300:
+                    payload = json.loads(response.decode("utf-8"))
+                    if payload.get("alias"):
+                        return payload
+            except (OSError, ValueError, UnicodeDecodeError):
+                pass
+        return None
+
+    hosts = local_network_hosts()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
+        for host, payload in zip(hosts, executor.map(probe, hosts)):
+            if payload:
+                add_device(devices, payload, host)
+
 
 def process_running():
-    patterns = ("localsend_app", "localsend")
-    for pattern in patterns:
+    exact_patterns = ("localsend_app", "localsend")
+    for pattern in exact_patterns:
         result = subprocess.run(
             ["pgrep", "-x", pattern],
             stdout=subprocess.DEVNULL,
@@ -291,7 +513,15 @@ def process_running():
         )
         if result.returncode == 0:
             return True
-    return False
+
+    # Flatpak may expose the application under its full app id instead of
+    # the short binary name.
+    result = subprocess.run(
+        ["pgrep", "-f", "org\\.localsend\\.localsend(_app)?"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return result.returncode == 0
 
 
 def main():
@@ -304,7 +534,8 @@ def main():
     send_parser.add_argument("--host", required=True)
     send_parser.add_argument("--port", type=int, required=True)
     send_parser.add_argument("--protocol", choices=("http", "https"), default="https")
-    send_parser.add_argument("--files", nargs="+", required=True)
+    send_parser.add_argument("--files", nargs="*", default=[])
+    send_parser.add_argument("--text", action="append", default=[])
     args = parser.parse_args()
 
     try:

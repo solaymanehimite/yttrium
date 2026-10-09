@@ -1,21 +1,24 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.src.services as Services
+
 // A compact, authored battery glyph.
 Item {
     id: battery
 
     property real rasterScale: 1.0
-    // Demo value for tuning the compact visual treatment.
-    readonly property real percentage: 67
+    readonly property real percentage: Services.PowerBattery.available
+        && Services.PowerBattery.percentage > 0
+        ? Services.PowerBattery.percentage : 100
     readonly property color backgroundColor: "#707070"
-    readonly property color fillColor: "#ffffff"
-    readonly property color pinColor: percentage >= 100 ? fillColor : backgroundColor
+    readonly property color fillColor: Services.Theme.barText
+    readonly property color pinColor: Services.PowerBattery.fullyCharged ? fillColor : backgroundColor
 
     visible: true
     width: 22
     height: 14
     Layout.alignment: Qt.AlignVCenter
-    Layout.preferredWidth: 22
+    Layout.preferredWidth: visible ? 22 : 0
     Layout.preferredHeight: 14
 
     Rectangle {
@@ -31,7 +34,7 @@ Item {
         Rectangle {
             x: 1
             y: 1
-            width: (body.width - 2) * battery.percentage / 100
+            width: Math.max(0, (body.width - 2) * battery.percentage / 100)
             height: body.height - 2
             radius: 2
             color: battery.fillColor

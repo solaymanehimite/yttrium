@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import qs.src.services
 
 PanelWindow {
     id: root
@@ -147,9 +148,9 @@ PanelWindow {
         width: root.menuWidth
         height: Math.min(Math.max(38, root.contentHeight()), root.height - y - 10)
         radius: 12
-        color: "#b8141414"
+        color: Theme.menuBackground
         border.width: 1
-        border.color: "#553a3a3a"
+        border.color: Theme.menuBorder
         clip: true
 
         MouseArea {
@@ -185,7 +186,7 @@ PanelWindow {
                     Rectangle {
                         anchors.fill: parent
                         radius: 7
-                        color: backMouse.containsMouse ? "#663b82f6" : "transparent"
+                        color: backMouse.containsMouse ? Theme.menuHover : "transparent"
 
                     }
 
@@ -205,7 +206,7 @@ PanelWindow {
                             height: 1.5
                             radius: 0.75
                             rotation: -45
-                            color: "#99ffffff"
+                            color: Theme.menuMutedText
                         }
 
                         Rectangle {
@@ -215,7 +216,7 @@ PanelWindow {
                             height: 1.5
                             radius: 0.75
                             rotation: 45
-                            color: "#99ffffff"
+                            color: Theme.menuMutedText
                         }
                     }
 
@@ -228,7 +229,7 @@ PanelWindow {
                             verticalCenter: parent.verticalCenter
                         }
                         text: String(root.currentMenu ? root.currentMenu.label : "Back").replace(/_/g, "")
-                        color: "#e6ffffff"
+                        color: Theme.menuText
                         elide: Text.ElideRight
                         font.family: "Google Sans Flex"
                         font.pixelSize: 15

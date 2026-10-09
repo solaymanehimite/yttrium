@@ -38,7 +38,7 @@ Image {
         }
     }
 
-        source: Icon.getPath(network.currentIcon)
+        source: Icon.getPath(network.currentIcon + Theme.topBarIconSuffix)
         width: 15
         height: 15
         sourceSize.width: 15 * network.rasterScale

@@ -22,7 +22,7 @@ RowLayout {
         Layout.preferredWidth: clockWidth.width
         Layout.maximumWidth: clockWidth.width
         text: Time.time
-        color: "white"
+        color: Theme.barText
         font.family: "Google Sans Flex"
         font.pixelSize: 14
         font.weight: Font.Medium
@@ -32,7 +32,7 @@ RowLayout {
     Text {
         Layout.alignment: Qt.AlignVCenter
         text: Time.date
-        color: "white"
+        color: Theme.barText
         font.family: "Google Sans Flex"
         font.pixelSize: 14
         font.weight: Font.Medium

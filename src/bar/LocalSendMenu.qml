@@ -2,6 +2,7 @@ import Quickshell
 import QtQuick
 import QtQuick.Controls
 import Quickshell.Wayland
+import qs.src.services
 
 PanelWindow {
     id: menu
@@ -18,6 +19,11 @@ PanelWindow {
     visible: controller.menuOpen
     color: "transparent"
 
+    BackgroundEffect.blurRegion: Region {
+        item: menuBox
+        radius: 12
+    }
+
     anchors {
         top: true
         bottom: true
@@ -33,14 +39,14 @@ PanelWindow {
     function anchorX() {
         if (!anchorItem)
             return 0;
-        const point = anchorItem.mapToGlobal(0, 0);
+        const point = menu.anchorItem.mapToGlobal(0, 0);
         return point.x - (screen ? screen.x : 0);
     }
 
     function updatePosition() {
         if (!anchorItem || !hostWindow)
             return;
-        const point = anchorItem.mapToGlobal(0, 0);
+        const point = menu.anchorItem.mapToGlobal(0, 0);
         const screenX = screen ? screen.x : 0;
         menuX = Math.max(8, Math.min(hostWindow.width - menuWidth - 8,
             point.x - screenX - menuWidth + anchorItem.width));
@@ -75,24 +81,36 @@ PanelWindow {
 
     Rectangle {
         id: menuBox
-        x: menu.menuX
         y: 34
+        property real contentHeight: 0
+        x: menu.menuX
         width: menu.menuWidth
-        height: Math.min(menu.height - y - 10, contentColumn.implicitHeight + 12)
+        height: Math.max(0, Math.min(menu.height - y - 10, contentHeight + 12))
         radius: 12
-        color: "#e60b1218"
-        border.width: 1
-        border.color: "#33485a"
+        color: Theme.menuBackground
+        border.width: 0
+        border.color: Theme.menuBorder
         clip: true
-
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onPressed: mouse.accepted = true
+            onPressed: function(mouse) { mouse.accepted = true; }
+        }
+
+        DropArea {
+            anchors.fill: parent
+            onEntered: controller.draggingOver = true
+            onExited: controller.draggingOver = false
+            onDropped: function(drop) {
+                controller.draggingOver = false;
+                controller.addDrop(drop);
+            }
         }
 
         Column {
             id: contentColumn
+            Component.onCompleted: menuBox.contentHeight = implicitHeight
+            onImplicitHeightChanged: menuBox.contentHeight = implicitHeight
             anchors {
                 fill: parent
                 margins: 6
@@ -109,11 +127,11 @@ PanelWindow {
                         leftMargin: 10
                         verticalCenter: parent.verticalCenter
                     }
-                    text: controller.pendingFiles.length > 0
-                        ? "Send " + controller.pendingFiles.length + " file"
-                            + (controller.pendingFiles.length === 1 ? "" : "s")
+                    text: controller.pendingCount > 0
+                        ? "Send " + controller.pendingCount + " item"
+                            + (controller.pendingCount === 1 ? "" : "s")
                         : "LocalSend"
-                    color: "white"
+                    color: Theme.menuText
                     font.pixelSize: 15
                     font.weight: 600
                 }
@@ -125,32 +143,26 @@ PanelWindow {
                         verticalCenter: parent.verticalCenter
                     }
                     text: controller.sending ? "Sending…" : "Devices"
-                    color: "#91a0ad"
+                    color: Theme.menuText
                     font.pixelSize: 12
                 }
             }
 
-            Rectangle {
-                width: parent.width
-                height: 1
-                color: "#26313b"
-            }
-
             Item {
-                visible: controller.pendingFiles.length === 0
+                visible: controller.pendingCount === 0
                 width: parent.width
                 height: visible ? 32 : 0
 
                 Text {
                     anchors.centerIn: parent
-                    text: "Drop files on the icon first"
-                    color: "#91a0ad"
+                    text: "Drop files or text here"
+                    color: Theme.menuText
                     font.pixelSize: 13
                 }
             }
 
             Item {
-                visible: controller.pendingFiles.length > 0
+                visible: controller.pendingCount > 0
                     && controller.devices.length === 0
                 width: parent.width
                 height: visible ? 36 : 0
@@ -160,7 +172,7 @@ PanelWindow {
                     text: controller.discovering
                         ? "Looking for devices…"
                         : (controller.error || "No devices found")
-                    color: controller.error ? "#ff9d9d" : "#91a0ad"
+                    color: controller.error ? "#c43d4b" : Theme.menuMutedText
                     font.pixelSize: 13
                 }
             }
@@ -176,7 +188,7 @@ PanelWindow {
                     Rectangle {
                         anchors.fill: parent
                         radius: 7
-                        color: deviceMouse.containsMouse ? "#263c4c" : "transparent"
+                        color: deviceMouse.containsMouse ? Theme.menuHover : "transparent"
                     }
 
                     Text {
@@ -188,7 +200,7 @@ PanelWindow {
                             verticalCenter: parent.verticalCenter
                         }
                         text: String(modelData.alias || "Unknown device")
-                        color: "white"
+                        color: Theme.menuText
                         elide: Text.ElideRight
                         font.pixelSize: 14
                     }
@@ -201,6 +213,37 @@ PanelWindow {
                         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: controller.sendTo(modelData)
                     }
+                }
+            }
+
+            Item {
+                visible: controller.pendingCount > 0
+                width: contentColumn.width
+                height: visible ? 34 : 0
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 7
+                    color: clearMouse.containsMouse ? Theme.menuHover : "transparent"
+                }
+
+                Text {
+                    anchors {
+                        left: parent.left
+                        leftMargin: 10
+                        verticalCenter: parent.verticalCenter
+                    }
+                    text: "Clear tray"
+                    color: Theme.menuText
+                    font.pixelSize: 13
+                }
+
+                MouseArea {
+                    id: clearMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: controller.clearPending()
                 }
             }
         }

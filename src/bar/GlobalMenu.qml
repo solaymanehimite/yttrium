@@ -3,6 +3,7 @@ import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import qs.src.services
 
 Pane {
     id: globalMenuPane
@@ -422,8 +423,8 @@ Pane {
                 }
                 radius: 8
                 color: appButton.selected
-                    ? "#32ffffff"
-                    : (appMouse.containsMouse && appButton.interactive ? "#1cffffff" : "transparent")
+                    ? Theme.barSelected
+                    : (appMouse.containsMouse && appButton.interactive ? Theme.barHover : "transparent")
             }
 
             Text {
@@ -434,10 +435,9 @@ Pane {
                     leftMargin: 8
                     rightMargin: 8
                     verticalCenter: parent.verticalCenter
-                    verticalCenterOffset: 4
                 }
                 text: globalMenuPane.activeAppName
-                color: "white"
+                color: Theme.barText
                 elide: Text.ElideRight
                 font.family: "Google Sans Flex"
                 font.pixelSize: 16
@@ -489,8 +489,8 @@ Pane {
                     }
                     radius: 8
                     color: menuButton.selected
-                        ? "#32ffffff"
-                        : (buttonMouse.containsMouse && menuButton.itemEnabled ? "#1cffffff" : "transparent")
+                        ? Theme.barSelected
+                        : (buttonMouse.containsMouse && menuButton.itemEnabled ? Theme.barHover : "transparent")
                 }
 
                 Text {
@@ -501,10 +501,9 @@ Pane {
                         leftMargin: 8
                         rightMargin: 8
                         verticalCenter: parent.verticalCenter
-                        verticalCenterOffset: 4
                     }
                     text: globalMenuPane.cleanLabel(menuButton.modelData ? menuButton.modelData.label : "")
-                    color: menuButton.itemEnabled ? "white" : "#78ffffff"
+                    color: menuButton.itemEnabled ? Theme.barText : Theme.barMutedText
                     elide: Text.ElideRight
                     font.family: "Google Sans Flex"
                     font.pixelSize: 16

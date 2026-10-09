@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
+import qs.src.services
 
 Item {
     id: row
@@ -40,7 +41,7 @@ Item {
         visible: !row.isSeparator
         anchors.fill: parent
         radius: 7
-        color: rowMouse.containsMouse && row.isEnabled ? "#663b82f6" : "transparent"
+        color: rowMouse.containsMouse && row.isEnabled ? Theme.menuHover : "transparent"
         opacity: row.isEnabled ? 1 : 0.48
 
         RowLayout {
@@ -65,7 +66,7 @@ Item {
                     radius: 5
                     color: "transparent"
                     border.width: 1
-                    border.color: "#99ffffff"
+                    border.color: Theme.menuMutedText
 
                     Rectangle {
                         visible: row.toggleOn
@@ -73,7 +74,7 @@ Item {
                         width: 4
                         height: 4
                         radius: 2
-                        color: "#e6ffffff"
+                        color: Theme.menuCheck
                     }
                 }
 
@@ -88,7 +89,7 @@ Item {
                         height: 1.5
                         radius: 0.75
                         rotation: 43
-                        color: "#e6ffffff"
+                        color: Theme.menuCheck
                     }
 
                     Rectangle {
@@ -98,7 +99,7 @@ Item {
                         height: 1.5
                         radius: 0.75
                         rotation: -47
-                        color: "#e6ffffff"
+                        color: Theme.menuCheck
                     }
                 }
             }
@@ -119,7 +120,7 @@ Item {
                     layer.enabled: true
                     layer.effect: MultiEffect {
                         colorization: 1
-                        colorizationColor: "#e6ffffff"
+                        colorizationColor: Theme.menuText
                     }
                 }
             }
@@ -128,7 +129,7 @@ Item {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
                 text: String(row.modelData.label || "").replace(/_/g, "")
-                color: "#e6ffffff"
+                color: Theme.menuText
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
                 font.family: "Google Sans Flex"
@@ -149,7 +150,7 @@ Item {
                     height: 1.5
                     radius: 0.75
                     rotation: 45
-                    color: "#99ffffff"
+                    color: Theme.menuMutedText
                 }
 
                 Rectangle {
@@ -159,7 +160,7 @@ Item {
                     height: 1.5
                     radius: 0.75
                     rotation: -45
-                    color: "#99ffffff"
+                    color: Theme.menuMutedText
                 }
             }
         }

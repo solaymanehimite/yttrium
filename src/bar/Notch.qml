@@ -152,6 +152,9 @@ PanelWindow {
             }, {
                 name: "Control center",
                 isControlAction: true
+            }, {
+                name: Theme.dark ? "Use light theme" : "Use dark theme",
+                isThemeAction: true
             }];
             return actions.filter(action => !actionQuery
                 || action.name.toLowerCase().includes(actionQuery));
@@ -238,6 +241,10 @@ PanelWindow {
 
         function toggleMenu(): void {
             notch.toggleMenu();
+        }
+
+        function toggleTheme(): void {
+            Theme.toggle();
         }
     }
 
@@ -427,6 +434,11 @@ PanelWindow {
             notch.menuOpening = false;
             notch.menuClosing = false;
             notch.transitioning = false;
+            if (notch.menuOpen && notch.osdTransitioning) {
+                notch.osdTransitioning = false;
+                notch.osdMode = "";
+                notch.osdClosing = false;
+            }
         }
     }
 
@@ -560,7 +572,10 @@ PanelWindow {
                             const selected = notch.launcherEntries[notch.selectedIndex];
                             if (selected.isControlAction)
                                 notch.openControlCenter();
-                            else if (selected.isActionPrefix)
+                            else if (selected.isThemeAction) {
+                                Theme.toggle();
+                                notch.toggleMenu();
+                            } else if (selected.isActionPrefix)
                                 notch.openActionSearch();
                             else if (selected.isWallpaperAction)
                                 notch.openWallpaperMode();
@@ -650,9 +665,11 @@ PanelWindow {
                                 ? Icon.getPath("wallpaper")
                                 : (modelData.isControlAction
                                     ? Icon.getPath("control-center")
-                                    : (modelData.isActionPrefix
-                                        ? Icon.getPath("actions")
-                                        : Quickshell.iconPath(modelData.icon, true)))
+                                    : (modelData.isThemeAction
+                                        ? Icon.getPath("theme")
+                                        : (modelData.isActionPrefix
+                                            ? Icon.getPath("actions")
+                                            : Quickshell.iconPath(modelData.icon, true))))
                             fillMode: Image.PreserveAspectFit
                             asynchronous: true
                             smooth: true
@@ -682,7 +699,10 @@ PanelWindow {
                                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                                     if (modelData.isControlAction)
                                         notch.openControlCenter();
-                                    else if (modelData.isActionPrefix)
+                                    else if (modelData.isThemeAction) {
+                                        Theme.toggle();
+                                        notch.toggleMenu();
+                                    } else if (modelData.isActionPrefix)
                                         notch.openActionSearch();
                                     else if (modelData.isWallpaperAction)
                                         notch.openWallpaperMode();
@@ -713,7 +733,10 @@ PanelWindow {
                                 onClicked: {
                                     if (modelData.isControlAction)
                                         notch.openControlCenter();
-                                    else if (modelData.isActionPrefix)
+                                    else if (modelData.isThemeAction) {
+                                        Theme.toggle();
+                                        notch.toggleMenu();
+                                    } else if (modelData.isActionPrefix)
                                         notch.openActionSearch();
                                     else if (modelData.isWallpaperAction)
                                         notch.openWallpaperMode();
@@ -1149,13 +1172,6 @@ PanelWindow {
                     ? 1 - launcher.revealProgress
                     : (!notch.menuOpen ? 1 : 0))
                 : 0
-            onOpacityChanged: {
-                if (notch.menuOpen && notch.osdTransitioning && opacity < 0.01) {
-                    notch.osdTransitioning = false;
-                    notch.osdMode = "";
-                    notch.osdClosing = false;
-                }
-            }
             Behavior on opacity {
                 NumberAnimation {
                     duration: notch.morphingFromOsd ? 0 : 140

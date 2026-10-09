@@ -18,37 +18,56 @@ RowLayout {
     height: parent.height
     spacing: 16
 
-    MouseArea {
-        anchors.fill: parent
-        anchors.margins: -6
-        cursorShape: Qt.PointingHandCursor
-        onClicked: indicators.controlCenterClicked()
-    }
-
     // Left-to-right order: LocalSend, volume, Wi-Fi, battery, then the clock/date.
     LocalSendIndicator {
         hostWindow: indicators.barWindow
     }
 
-    Volume {
-        source: {
-            if (Audio.muted)
-                return Icon.getPath("volume/volume_muted_red");
-            if (Audio.volume < 0.33)
-                return Icon.getPath("volume/volume_low");
-            if (Audio.volume < 0.66)
-                return Icon.getPath("volume/volume_medium");
-            return Icon.getPath("volume/volume_high");
+    Item {
+        Layout.preferredWidth: 100
+        Layout.preferredHeight: 26
+        Layout.alignment: Qt.AlignVCenter
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 8
+            color: controlGroupMouse.containsMouse
+                ? Theme.indicatorHover : "transparent"
         }
-        rasterScale: 1.0
-    }
 
-    Network {
-        rasterScale: 1.0
-    }
+        RowLayout {
+            anchors.centerIn: parent
+            spacing: 16
 
-    Battery {
-        rasterScale: 1.0
+            Volume {
+                source: {
+                    if (Audio.muted)
+                        return Icon.getPath("volume/volume_muted_red" + Theme.topBarIconSuffix);
+                    if (Audio.volume < 0.33)
+                        return Icon.getPath("volume/volume_low" + Theme.topBarIconSuffix);
+                    if (Audio.volume < 0.66)
+                        return Icon.getPath("volume/volume_medium" + Theme.topBarIconSuffix);
+                    return Icon.getPath("volume/volume_high" + Theme.topBarIconSuffix);
+                }
+                rasterScale: 1.0
+            }
+
+            Network {
+                rasterScale: 1.0
+            }
+
+            Battery {
+                rasterScale: 1.0
+            }
+        }
+
+        MouseArea {
+            id: controlGroupMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: indicators.controlCenterClicked()
+        }
     }
 
     Clock {}

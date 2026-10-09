@@ -2,6 +2,7 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
+import qs.src.services
 
 Item {
     id: indicator
@@ -18,9 +19,11 @@ Item {
     property string error: ""
     property var devices: []
     property var pendingFiles: []
+    property var pendingTexts: []
+    readonly property int pendingCount: pendingFiles.length + pendingTexts.length
 
-    implicitWidth: 18
-    implicitHeight: 18
+    implicitWidth: 26
+    implicitHeight: 26
     Layout.preferredWidth: implicitWidth
     Layout.preferredHeight: implicitHeight
     Layout.alignment: Qt.AlignVCenter
@@ -50,19 +53,29 @@ Item {
     }
 
     function addDrop(drop) {
-        if (!drop || !drop.urls)
+        if (!drop)
             return;
 
-        const next = pendingFiles.slice();
-        for (let i = 0; i < drop.urls.length; i++) {
-            const path = normalizeUrl(drop.urls[i]);
-            if (path && next.indexOf(path) === -1)
-                next.push(path);
+        const urls = drop.urls || [];
+        const nextFiles = pendingFiles.slice();
+        for (let i = 0; i < urls.length; i++) {
+            const path = normalizeUrl(urls[i]);
+            if (path && nextFiles.indexOf(path) === -1)
+                nextFiles.push(path);
         }
-        if (next.length === pendingFiles.length)
+
+        const nextTexts = pendingTexts.slice();
+        const droppedText = drop.text ? String(drop.text).trim() : "";
+        if (urls.length === 0 && droppedText
+                && nextTexts.indexOf(droppedText) === -1)
+            nextTexts.push(droppedText);
+
+        if (nextFiles.length === pendingFiles.length
+                && nextTexts.length === pendingTexts.length)
             return;
 
-        pendingFiles = next;
+        pendingFiles = nextFiles;
+        pendingTexts = nextTexts;
         error = "";
         menuOpen = true;
         refreshDevices();
@@ -71,7 +84,7 @@ Item {
     }
 
     function refreshDevices() {
-        if (!running || discovering || discoverProcess.running)
+        if (discovering || discoverProcess.running)
             return;
         discovering = true;
         error = "";
@@ -79,10 +92,8 @@ Item {
     }
 
     function openMenu() {
-        if (!running) {
+        if (!running)
             launch();
-            return;
-        }
         menuOpen = true;
         refreshDevices();
     }
@@ -91,19 +102,29 @@ Item {
         menuOpen = false;
     }
 
+    function clearPending() {
+        pendingFiles = [];
+        pendingTexts = [];
+        error = "";
+    }
+
     function sendTo(device) {
-        if (!device || sending || pendingFiles.length === 0)
+        if (!device || sending || pendingCount === 0)
             return;
 
         sending = true;
         error = "";
-        sendProcess.command = [
+        let command = [
             "python3", bridgePath, "send",
             "--host", String(device.host),
             "--port", String(device.port),
-            "--protocol", String(device.protocol || "https"),
-            "--files"
-        ].concat(pendingFiles);
+            "--protocol", String(device.protocol || "https")
+        ];
+        if (pendingFiles.length > 0)
+            command = command.concat(["--files"]).concat(pendingFiles);
+        for (let i = 0; i < pendingTexts.length; i++)
+            command.push("--text=" + pendingTexts[i]);
+        sendProcess.command = command;
         sendProcess.running = true;
     }
 
@@ -141,18 +162,24 @@ Item {
         id: launchProcess
         command: ["sh", "-c",
             "if command -v localsend_app >/dev/null 2>&1; then "
-            + "exec localsend_app --hidden; "
+            + "setsid -f localsend_app --hidden >/dev/null 2>&1; "
             + "elif command -v localsend >/dev/null 2>&1; then "
-            + "exec localsend --hidden; "
+            + "setsid -f localsend --hidden >/dev/null 2>&1; "
             + "elif command -v flatpak >/dev/null 2>&1; then "
-            + "exec flatpak run org.localsend.localsend --hidden; "
+            + "setsid -f flatpak run org.localsend.localsend_app --hidden >/dev/null 2>&1; "
             + "else exit 127; fi"]
 
         onExited: function(exitCode) {
             if (exitCode !== 0 && !indicator.running)
                 indicator.error = "LocalSend is not installed";
-            indicator.refreshStatus();
+            launchStatusTimer.restart();
         }
+    }
+
+    Timer {
+        id: launchStatusTimer
+        interval: 500
+        onTriggered: indicator.refreshStatus()
     }
 
     Process {
@@ -199,6 +226,7 @@ Item {
             indicator.sending = false;
             if (exitCode === 0) {
                 indicator.pendingFiles = [];
+                indicator.pendingTexts = [];
                 indicator.menuOpen = false;
             } else if (!indicator.error) {
                 indicator.error = "The transfer failed";
@@ -206,13 +234,24 @@ Item {
         }
     }
 
+    Rectangle {
+        anchors.centerIn: parent
+        width: 26
+        height: 26
+        radius: 8
+        color: indicator.menuOpen
+            ? Theme.indicatorActive
+            : (iconHover.hovered ? Theme.indicatorHover : "transparent")
+
+    }
+
     Image {
         id: icon
         anchors.centerIn: parent
         width: 16
         height: 16
-        source: "file://" + Quickshell.shellDir + "/assets/icons/localsend.png"
-        sourceSize: Qt.size(32, 32)
+        source: Icon.getPath("localsend" + Theme.topBarIconSuffix)
+        sourceSize: Qt.size(16, 16)
         fillMode: Image.PreserveAspectFit
         opacity: indicator.running ? (iconHover.hovered ? 1 : 0.82) : 0.34
         smooth: true
@@ -223,26 +262,24 @@ Item {
     }
 
     Rectangle {
-        visible: indicator.pendingFiles.length > 0
+        visible: indicator.pendingCount > 0
         anchors {
             top: parent.top
             right: parent.right
-            topMargin: -5
-            rightMargin: -6
+            topMargin: -1
+            rightMargin: -4
         }
-        width: Math.max(11, badgeText.implicitWidth + 6)
-        height: 11
-        radius: 5.5
+        width: Math.max(14, badgeText.implicitWidth + 8)
+        height: 14
+        radius: 7
         color: "#4d7dff"
-        border.width: 1
-        border.color: "#080b10"
 
         Text {
             id: badgeText
             anchors.centerIn: parent
-            text: indicator.pendingFiles.length
+            text: indicator.pendingCount
             color: "white"
-            font.pixelSize: 8
+            font.pixelSize: 9
             font.weight: 700
         }
     }
