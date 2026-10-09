@@ -1,16 +1,79 @@
 import Quickshell
 import Quickshell.Io
+import Quickshell.Bluetooth
+import Quickshell.Networking
+import Quickshell.Services.Mpris
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Effects
 import Quickshell.Wayland
 
 import qs.src.bar.notch_modes
+import qs.src.bar.notch_widgets as NotchWidgets
 import qs.src.services
 
 // One top-surface with two states: a transient OSD and an expandable menu.
 PanelWindow {
     id: notch
+
+    component ControlGridCell: Rectangle {
+        required property var grid
+        property int gridColumn: 0
+        property int gridRow: 0
+        property int columnSpan: 1
+        property int rowSpan: 1
+        property color baseColor: "transparent"
+        property color hoverColor: baseColor
+
+        x: gridColumn * (grid.cellWidth + grid.gap)
+        y: gridRow * (grid.cellHeight + grid.gap)
+        width: columnSpan * grid.cellWidth + (columnSpan - 1) * grid.gap
+        height: rowSpan * grid.cellHeight + (rowSpan - 1) * grid.gap
+        color: tileHover.hovered ? hoverColor : baseColor
+
+        Behavior on color {
+            ColorAnimation { duration: 100 }
+        }
+
+        HoverHandler {
+            id: tileHover
+            cursorShape: Qt.PointingHandCursor
+        }
+    }
+
+    component MediaControl: Item {
+        id: mediaControl
+        required property string iconName
+        property bool active: false
+        signal triggered()
+
+        width: 22
+        height: 22
+        opacity: enabled ? (active || controlHover.hovered ? 1 : 0.72) : 0.28
+
+        Behavior on opacity {
+            NumberAnimation { duration: 100 }
+        }
+
+        Image {
+            anchors.centerIn: parent
+            width: 18
+            height: 18
+            source: Icon.getPath(mediaControl.iconName)
+            sourceSize: Qt.size(18, 18)
+            fillMode: Image.PreserveAspectFit
+            smooth: true
+        }
+
+        HoverHandler {
+            id: controlHover
+            cursorShape: mediaControl.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+        }
+
+        TapHandler {
+            enabled: mediaControl.enabled
+            onTapped: mediaControl.triggered()
+        }
+    }
 
     screen: bar.screen
     // Keep the layer surface alive. When idle it sits below normal windows,
@@ -37,7 +100,47 @@ PanelWindow {
     property int selectedIndex: 0
     property int wallpaperIndex: 0
     property bool modeTransitioning: false
-    readonly property int menuWidth: launcherMode === "wallpapers" ? 760 : 420
+    readonly property string wifiStatus: {
+        if (!Networking.wifiHardwareEnabled)
+            return "Unavailable";
+        if (!Networking.wifiEnabled)
+            return "Off";
+        return NetworkService.connectedNetwork
+            ? NetworkService.connectedNetwork.name : "Not connected";
+    }
+    readonly property var mediaPlayer: {
+        const players = Mpris.players.values;
+        for (let i = 0; i < players.length; i++) {
+            if (players[i].isPlaying)
+                return players[i];
+        }
+        return players.length > 0 ? players[0] : null;
+    }
+    readonly property string mediaTitle: mediaPlayer && mediaPlayer.trackTitle
+        ? mediaPlayer.trackTitle : "Not Playing"
+    readonly property var bluetoothAdapter: Bluetooth.defaultAdapter
+    readonly property bool bluetoothChanging: bluetoothAdapter
+        && (bluetoothAdapter.state === BluetoothAdapterState.Enabling
+            || bluetoothAdapter.state === BluetoothAdapterState.Disabling)
+    readonly property bool bluetoothCanToggle: bluetoothAdapter
+        && bluetoothAdapter.state !== BluetoothAdapterState.Blocked
+        && !bluetoothChanging
+    readonly property string bluetoothIconName: bluetoothChanging
+        ? "bluetooth/connecting"
+        : (bluetoothAdapter && bluetoothAdapter.enabled
+            ? "bluetooth/on" : "bluetooth/off")
+    readonly property string bluetoothStatus: {
+        if (!bluetoothAdapter)
+            return "Unavailable";
+        if (bluetoothChanging)
+            return bluetoothAdapter.state === BluetoothAdapterState.Enabling
+                ? "Turning on" : "Turning off";
+        if (bluetoothAdapter.state === BluetoothAdapterState.Blocked)
+            return "Blocked";
+        return bluetoothAdapter.enabled ? "On" : "Off";
+    }
+    readonly property int menuWidth: launcherMode === "wallpapers"
+        ? 760 : (launcherMode === "control" ? 620 : 420)
     readonly property bool actionSearch: notch.searchQuery.startsWith(">")
     readonly property var launcherEntries: {
         const query = notch.searchQuery.trim().toLowerCase();
@@ -46,6 +149,9 @@ PanelWindow {
             const actions = [{
                 name: "Wallpapers",
                 isWallpaperAction: true
+            }, {
+                name: "Control center",
+                isControlAction: true
             }];
             return actions.filter(action => !actionQuery
                 || action.name.toLowerCase().includes(actionQuery));
@@ -64,8 +170,9 @@ PanelWindow {
     }
     readonly property int menuHeight: launcherMode === "wallpapers"
         ? 280
-        : Math.max(94, Math.min(360,
-            58 + Math.max(1, launcherEntries.length) * 36))
+        : (launcherMode === "control" ? 250
+            : Math.max(94, Math.min(360,
+                58 + Math.max(1, launcherEntries.length) * 36)))
     property string osdMode: ""
     property bool displaying: false
     property bool osdClosing: false
@@ -185,6 +292,29 @@ PanelWindow {
         selectedIndex = 0;
     }
 
+    function openControlCenter() {
+        if (!menuOpen) {
+            hideTimer.stop();
+            exitTimer.stop();
+            osdMode = "";
+            displaying = false;
+            menuClosing = false;
+            menuOpening = true;
+            menuOpen = true;
+        }
+        modeTransitioning = true;
+        launcherMode = "control";
+        modeAnimationTimer.restart();
+    }
+
+    function closeControlCenter() {
+        modeTransitioning = true;
+        launcherMode = "apps";
+        searchQuery = "";
+        modeAnimationTimer.restart();
+        Qt.callLater(function() { searchInput.forceActiveFocus(); });
+    }
+
     function wallpaperAt(offset) {
         if (wallpapers.length === 0)
             return "";
@@ -195,10 +325,8 @@ PanelWindow {
         if (wallpaperIndex < 0 || wallpaperIndex >= wallpapers.length)
             return;
         wallpaperApply.exec([
-            "awww", "img", wallpapers[wallpaperIndex],
-            "--transition-type", "grow",
-            "--transition-pos", "0.5,0.75",
-            "--transition-duration", "0.3"
+            Quickshell.shellDir + "/scripts/apply-wallpaper.sh",
+            wallpapers[wallpaperIndex]
         ]);
     }
 
@@ -352,8 +480,10 @@ PanelWindow {
         radius: 0
         topLeftRadius: 0
         topRightRadius: 0
-        bottomLeftRadius: notch.menuOpen || notch.menuClosing ? 18 : height / 2
-        bottomRightRadius: notch.menuOpen || notch.menuClosing ? 18 : height / 2
+        bottomLeftRadius: notch.menuOpen || notch.menuClosing
+            ? (notch.launcherMode === "control" ? 28 : 18) : height / 2
+        bottomRightRadius: notch.menuOpen || notch.menuClosing
+            ? (notch.launcherMode === "control" ? 28 : 18) : height / 2
         color: "#000000"
         clip: true
         opacity: 1
@@ -410,7 +540,7 @@ PanelWindow {
                 id: searchInput
                 width: parent.width
                 height: 34
-                leftPadding: 12
+                leftPadding: 34
                 rightPadding: 12
                 text: notch.searchQuery
                 color: "#f4f5f7"
@@ -428,7 +558,9 @@ PanelWindow {
                     if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                         if (notch.launcherEntries.length > 0) {
                             const selected = notch.launcherEntries[notch.selectedIndex];
-                            if (selected.isActionPrefix)
+                            if (selected.isControlAction)
+                                notch.openControlCenter();
+                            else if (selected.isActionPrefix)
                                 notch.openActionSearch();
                             else if (selected.isWallpaperAction)
                                 notch.openWallpaperMode();
@@ -452,9 +584,19 @@ PanelWindow {
                     }
                 }
 
-                Text {
+                Image {
                     anchors.left: parent.left
                     anchors.leftMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 15
+                    height: 15
+                    source: Icon.getPath("search")
+                    sourceSize: Qt.size(15, 15)
+                }
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 34
                     anchors.verticalCenter: parent.verticalCenter
                     text: "Search applications"
                     color: "#777e8b"
@@ -506,9 +648,11 @@ PanelWindow {
                             height: 20
                             source: modelData.isWallpaperAction
                                 ? Icon.getPath("wallpaper")
-                                : (modelData.isActionPrefix
-                                    ? Icon.getPath("actions")
-                                    : Quickshell.iconPath(modelData.icon, true))
+                                : (modelData.isControlAction
+                                    ? Icon.getPath("control-center")
+                                    : (modelData.isActionPrefix
+                                        ? Icon.getPath("actions")
+                                        : Quickshell.iconPath(modelData.icon, true)))
                             fillMode: Image.PreserveAspectFit
                             asynchronous: true
                             smooth: true
@@ -525,7 +669,7 @@ PanelWindow {
                         }
 
                         Text {
-                            visible: modelData.isActionPrefix
+                            visible: !!modelData.isActionPrefix
                             anchors.verticalCenter: parent.verticalCenter
                             text: ">"
                             color: "#777e8b"
@@ -536,7 +680,9 @@ PanelWindow {
 
                             Keys.onPressed: function(event) {
                                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                    if (modelData.isActionPrefix)
+                                    if (modelData.isControlAction)
+                                        notch.openControlCenter();
+                                    else if (modelData.isActionPrefix)
                                         notch.openActionSearch();
                                     else if (modelData.isWallpaperAction)
                                         notch.openWallpaperMode();
@@ -565,7 +711,9 @@ PanelWindow {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    if (modelData.isActionPrefix)
+                                    if (modelData.isControlAction)
+                                        notch.openControlCenter();
+                                    else if (modelData.isActionPrefix)
                                         notch.openActionSearch();
                                     else if (modelData.isWallpaperAction)
                                         notch.openWallpaperMode();
@@ -580,6 +728,273 @@ PanelWindow {
                     }
                 }
 
+            }
+        }
+
+        Item {
+            id: controlPanel
+            anchors.fill: parent
+            anchors.margins: 12
+            visible: notch.menuOpen && notch.launcherMode === "control"
+            focus: visible
+            opacity: visible ? 1 : 0
+            Behavior on opacity {
+                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            }
+
+            Keys.onEscapePressed: notch.closeControlCenter()
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 8
+
+                Row {
+                    id: controlContent
+                    width: parent.width
+                    height: parent.height
+                    spacing: 10
+
+                    Column {
+                        id: calendarColumn
+                        width: 220
+                        spacing: 10
+
+                        Text {
+                            text: Qt.formatDate(new Date(), "MMMM").toUpperCase()
+                            color: "#4d7dff"
+                            leftPadding: 5
+                            bottomPadding: 5
+                            font.pixelSize: 13
+                            font.weight: 550
+                        }
+
+                        Row {
+                            spacing: 6
+                            Repeater {
+                                model: ["M", "T", "W", "T", "F", "S", "S"]
+                                Text {
+                                    required property string modelData
+                                    width: 24
+                                    text: modelData
+                                    color: "#c8ccd2"
+                                    font.pixelSize: 13
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+                            }
+                        }
+
+                        Grid {
+                            columns: 7
+                            columnSpacing: 6
+                            rowSpacing: 5
+                            Repeater {
+                                model: 35
+                                Text {
+                                    required property int index
+                                    property int day: index - new Date(new Date().getFullYear(), new Date().getMonth(), 1).getDay() + 2
+                                    width: 24
+                                    height: 24
+                                    visible: day > 0 && day <= new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
+                                    text: visible ? day : ""
+                                    color: day === new Date().getDate() ? "#111214" : "#8e939d"
+                                    font.weight: Font.Normal
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    font.pixelSize: 13
+                                    Rectangle {
+                                        visible: day === new Date().getDate()
+                                        anchors.centerIn: parent
+                                        width: 26
+                                        height: 26
+                                        radius: width / 2
+                                        color: "#4d7dff"
+                                        z: -1
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Item {
+                        id: controlGrid
+                        readonly property real gap: 4
+                        readonly property int columns: 4
+                        readonly property int rows: 3
+                        readonly property color activeTileColor: "#101a22"
+                        readonly property color passiveTileColor: "#0b1218"
+                        readonly property color hoverTileColor: "#162630"
+                        readonly property real wideTileSidePadding: 16
+                        readonly property real wideTileIconGap: 12
+                        readonly property real tileRadius: 14
+                        readonly property int titleSize: 14
+                        readonly property int subtitleSize: 12
+                        readonly property real cellWidth: (width - (columns - 1) * gap) / columns
+                        readonly property real cellHeight: (height - (rows - 1) * gap) / rows
+
+                        width: controlContent.width - calendarColumn.width - controlContent.spacing
+                        height: controlContent.height
+
+                        ControlGridCell {
+                            grid: controlGrid
+                            gridColumn: 0
+                            gridRow: 0
+                            columnSpan: 2
+                            radius: controlGrid.tileRadius
+                            baseColor: Networking.wifiEnabled
+                                ? controlGrid.activeTileColor
+                                : controlGrid.passiveTileColor
+                            hoverColor: controlGrid.hoverTileColor
+                            opacity: Networking.wifiHardwareEnabled ? 1 : 0.55
+                            Row {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.leftMargin: controlGrid.wideTileSidePadding
+                                anchors.rightMargin: controlGrid.wideTileSidePadding
+                                spacing: controlGrid.wideTileIconGap
+                                NotchWidgets.Network {
+                                    width: 20
+                                    height: 20
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    rasterScale: 20 / 15
+                                }
+                                Column {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Text { text: "Wi-Fi"; color: "white"; font.pixelSize: controlGrid.titleSize }
+                                    Text { text: notch.wifiStatus; color: "#d8f1ff"; font.pixelSize: controlGrid.subtitleSize }
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: Networking.wifiHardwareEnabled
+                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: Networking.wifiEnabled = !Networking.wifiEnabled
+                            }
+                        }
+
+                        ControlGridCell {
+                            grid: controlGrid
+                            gridColumn: 0
+                            gridRow: 1
+                            columnSpan: 2
+                            radius: controlGrid.tileRadius
+                            baseColor: notch.bluetoothAdapter
+                                && (notch.bluetoothAdapter.enabled || notch.bluetoothChanging)
+                                ? controlGrid.activeTileColor
+                                : controlGrid.passiveTileColor
+                            hoverColor: controlGrid.hoverTileColor
+                            opacity: notch.bluetoothAdapter ? 1 : 0.55
+
+                            Row {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.leftMargin: controlGrid.wideTileSidePadding
+                                anchors.rightMargin: controlGrid.wideTileSidePadding
+                                spacing: controlGrid.wideTileIconGap
+                                Image {
+                                    width: 20
+                                    height: 20
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    source: Icon.getPath(notch.bluetoothIconName)
+                                    sourceSize: Qt.size(20, 20)
+                                    fillMode: Image.PreserveAspectFit
+                                    smooth: true
+                                }
+                                Column {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Text { text: "Bluetooth"; color: "white"; font.pixelSize: controlGrid.titleSize }
+                                    Text { text: notch.bluetoothStatus; color: "#d8f1ff"; font.pixelSize: controlGrid.subtitleSize }
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: notch.bluetoothCanToggle
+                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: notch.bluetoothAdapter.enabled = !notch.bluetoothAdapter.enabled
+                            }
+                        }
+
+                        ControlGridCell {
+                            grid: controlGrid
+                            gridColumn: 2
+                            gridRow: 0
+                            columnSpan: 2
+                            rowSpan: 2
+                            radius: controlGrid.tileRadius
+                            baseColor: controlGrid.passiveTileColor
+                            hoverColor: controlGrid.hoverTileColor
+                            Text {
+                                anchors.top: parent.top
+                                anchors.left: parent.left
+                                anchors.topMargin: 14
+                                anchors.leftMargin: 14
+                                width: parent.width - 28
+                                text: notch.mediaTitle
+                                color: "white"
+                                elide: Text.ElideRight
+                                font.pixelSize: controlGrid.titleSize
+                                font.weight: 600
+                            }
+                            Row {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 14
+                                spacing: 7
+
+                                MediaControl {
+                                    iconName: "media/repeat"
+                                    enabled: notch.mediaPlayer && notch.mediaPlayer.loopSupported
+                                    active: enabled && notch.mediaPlayer.loopState !== MprisLoopState.None
+                                    onTriggered: {
+                                        notch.mediaPlayer.loopState = active
+                                            ? MprisLoopState.None : MprisLoopState.Playlist;
+                                    }
+                                }
+                                MediaControl {
+                                    iconName: "media/previous"
+                                    enabled: notch.mediaPlayer && notch.mediaPlayer.canGoPrevious
+                                    onTriggered: notch.mediaPlayer.previous()
+                                }
+                                MediaControl {
+                                    iconName: notch.mediaPlayer && notch.mediaPlayer.isPlaying
+                                        ? "media/pause" : "media/play"
+                                    enabled: notch.mediaPlayer && notch.mediaPlayer.canTogglePlaying
+                                    active: notch.mediaPlayer && notch.mediaPlayer.isPlaying
+                                    onTriggered: notch.mediaPlayer.togglePlaying()
+                                }
+                                MediaControl {
+                                    iconName: "media/next"
+                                    enabled: notch.mediaPlayer && notch.mediaPlayer.canGoNext
+                                    onTriggered: notch.mediaPlayer.next()
+                                }
+                                MediaControl {
+                                    iconName: "media/playlist"
+                                    enabled: notch.mediaPlayer && notch.mediaPlayer.canRaise
+                                    onTriggered: notch.mediaPlayer.raise()
+                                }
+                            }
+                        }
+
+                        Repeater {
+                            model: ["⋮", "▣", "▣", "⌁"]
+                            delegate: ControlGridCell {
+                                required property string modelData
+                                required property int index
+                                grid: controlGrid
+                                gridColumn: index
+                                gridRow: 2
+                                radius: controlGrid.tileRadius
+                                baseColor: controlGrid.passiveTileColor
+                                hoverColor: controlGrid.hoverTileColor
+                                Text { anchors.centerIn: parent; text: modelData; color: "white"; font.pixelSize: 20 }
+                            }
+                        }
+                    }
+                }
             }
         }
 
