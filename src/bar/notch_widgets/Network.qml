@@ -36,6 +36,7 @@ Image {
             if (dev.hasLink || dev.network) {return "lan/connected"; }
             return "lan/no_internet";
         }
+        return "wifi/unknown";
     }
 
         source: Icon.getPath(network.currentIcon + Theme.topBarIconSuffix)

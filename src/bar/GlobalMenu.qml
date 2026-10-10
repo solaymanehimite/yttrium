@@ -439,7 +439,7 @@ Pane {
                 text: globalMenuPane.activeAppName
                 color: Theme.barText
                 elide: Text.ElideRight
-                font.family: "Google Sans Flex"
+                font.family: Config.fontFamily
                 font.pixelSize: 16
                 font.weight: 650
             }
@@ -505,7 +505,7 @@ Pane {
                     text: globalMenuPane.cleanLabel(menuButton.modelData ? menuButton.modelData.label : "")
                     color: menuButton.itemEnabled ? Theme.barText : Theme.barMutedText
                     elide: Text.ElideRight
-                    font.family: "Google Sans Flex"
+                    font.family: Config.fontFamily
                     font.pixelSize: 16
                     font.weight: 500
                 }
@@ -545,7 +545,7 @@ Pane {
         property: "opacity"
         from: 0
         to: 1
-        duration: 220
+        duration: Config.menuAnimation
         easing.type: Easing.OutCubic
     }
 }

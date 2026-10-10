@@ -8,7 +8,7 @@ PanelWindow {
 
     // Keep the cleartouchd client alive for the lifetime of the shell.
     readonly property var multiPadService: MultiPad
-    readonly property int niriGap: 6
+    readonly property int niriGap: Config.barGap
 
     anchors {
         top: true
@@ -25,7 +25,7 @@ PanelWindow {
     }
     exclusiveZone: implicitHeight + bar.niriGap
 
-    implicitHeight: 30
+    implicitHeight: Config.barHeight
     color: "transparent"
 
     GlobalMenu {

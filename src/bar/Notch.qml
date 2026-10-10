@@ -31,7 +31,7 @@ PanelWindow {
         color: tileHover.hovered ? hoverColor : baseColor
 
         Behavior on color {
-            ColorAnimation { duration: 100 }
+            ColorAnimation { duration: Config.shortAnimation }
         }
 
         HoverHandler {
@@ -51,7 +51,7 @@ PanelWindow {
         opacity: enabled ? (active || controlHover.hovered ? 1 : 0.72) : 0.28
 
         Behavior on opacity {
-            NumberAnimation { duration: 100 }
+            NumberAnimation { duration: Config.shortAnimation }
         }
 
         Image {
@@ -195,6 +195,8 @@ PanelWindow {
     readonly property bool osdActive: osdMode !== ""
     property bool ready: false
     property bool suppressExternalOsd: false
+    property bool doNotDisturb: false
+    property bool fakeTimerActive: false
 
     Component.onCompleted: refreshWallpapers()
 
@@ -293,6 +295,14 @@ PanelWindow {
         Qt.callLater(function() { searchInput.forceActiveFocus(); });
     }
 
+    function openAppSearch() {
+        closeControlCenter();
+        launcherMode = "apps";
+        searchInput.text = "";
+        searchInput.forceActiveFocus();
+        selectedIndex = 0;
+    }
+
     function openActionSearch() {
         searchInput.text = ">";
         searchInput.forceActiveFocus();
@@ -339,7 +349,7 @@ PanelWindow {
 
     Process {
         id: wallpaperScan
-        command: ["find", Quickshell.env("HOME") + "/Pictures/Wallpapers", "-type", "f"]
+        command: ["find", Config.wallpaperDirectory, "-type", "f"]
         stdout: StdioCollector {
             id: wallpaperOutput
             onStreamFinished: {
@@ -355,6 +365,18 @@ PanelWindow {
 
     Process {
         id: wallpaperApply
+    }
+
+    Process {
+        id: dndProcess
+    }
+
+    onDoNotDisturbChanged: {
+        if (!dndProcess.running) {
+            dndProcess.command = ["makoctl", "mode",
+                doNotDisturb ? "-a" : "-r", "do-not-disturb"];
+            dndProcess.running = true;
+        }
     }
 
     Timer {
@@ -559,7 +581,7 @@ PanelWindow {
                 selectionColor: "#557aa7"
                 clip: true
                 focus: notch.menuOpen
-                font.family: "Google Sans Flex"
+                font.family: Config.fontFamily
                 font.pixelSize: 15
                 verticalAlignment: Text.AlignVCenter
                 onTextChanged: {
@@ -681,7 +703,7 @@ PanelWindow {
                             text: String(modelData.name || modelData.id)
                             color: "#f4f5f7"
                             elide: Text.ElideRight
-                            font.family: "Google Sans Flex"
+                            font.family: Config.fontFamily
                             font.pixelSize: 15
                         }
 
@@ -756,6 +778,8 @@ PanelWindow {
 
         Item {
             id: controlPanel
+            readonly property int calendarFirstDay: (new Date(Time.year, Time.month, 1).getDay() + 6) % 7
+            readonly property int calendarDays: new Date(Time.year, Time.month + 1, 0).getDate()
             anchors.fill: parent
             anchors.margins: 12
             visible: notch.menuOpen && notch.launcherMode === "control"
@@ -784,7 +808,7 @@ PanelWindow {
                         spacing: 10
 
                         Text {
-                            text: Qt.formatDate(new Date(), "MMMM").toUpperCase()
+                            text: Qt.formatDate(new Date(Time.year, Time.month, 1), "MMMM").toUpperCase()
                             color: "#4d7dff"
                             leftPadding: 5
                             bottomPadding: 5
@@ -812,21 +836,21 @@ PanelWindow {
                             columnSpacing: 6
                             rowSpacing: 5
                             Repeater {
-                                model: 35
+                                model: 42
                                 Text {
                                     required property int index
-                                    property int day: index - new Date(new Date().getFullYear(), new Date().getMonth(), 1).getDay() + 2
+                                    property int day: index - controlPanel.calendarFirstDay + 1
                                     width: 24
                                     height: 24
-                                    visible: day > 0 && day <= new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
+                                    visible: day > 0 && day <= controlPanel.calendarDays
                                     text: visible ? day : ""
-                                    color: day === new Date().getDate() ? "#111214" : "#8e939d"
+                                    color: day === Time.day ? "#111214" : "#8e939d"
                                     font.weight: Font.Normal
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                     font.pixelSize: 13
                                     Rectangle {
-                                        visible: day === new Date().getDate()
+                                        visible: day === Time.day
                                         anchors.centerIn: parent
                                         width: 26
                                         height: 26
@@ -1002,18 +1026,81 @@ PanelWindow {
                             }
                         }
 
-                        Repeater {
-                            model: ["⋮", "▣", "▣", "⌁"]
-                            delegate: ControlGridCell {
-                                required property string modelData
-                                required property int index
-                                grid: controlGrid
-                                gridColumn: index
-                                gridRow: 2
-                                radius: controlGrid.tileRadius
-                                baseColor: controlGrid.passiveTileColor
-                                hoverColor: controlGrid.hoverTileColor
-                                Text { anchors.centerIn: parent; text: modelData; color: "white"; font.pixelSize: 20 }
+                        ControlGridCell {
+                            grid: controlGrid
+                            gridColumn: 0
+                            gridRow: 2
+                            radius: controlGrid.tileRadius
+                            baseColor: notch.doNotDisturb
+                                ? controlGrid.activeTileColor : controlGrid.passiveTileColor
+                            hoverColor: controlGrid.hoverTileColor
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Do not disturb"
+                                color: "white"
+                                font.pixelSize: controlGrid.subtitleSize
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: notch.doNotDisturb = !notch.doNotDisturb
+                            }
+                        }
+
+                        ControlGridCell {
+                            grid: controlGrid
+                            gridColumn: 1
+                            gridRow: 2
+                            radius: controlGrid.tileRadius
+                            baseColor: controlGrid.passiveTileColor
+                            hoverColor: controlGrid.hoverTileColor
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Search"
+                                color: "white"
+                                font.pixelSize: controlGrid.subtitleSize
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: notch.openAppSearch()
+                            }
+                        }
+
+                        ControlGridCell {
+                            grid: controlGrid
+                            gridColumn: 2
+                            gridRow: 2
+                            radius: controlGrid.tileRadius
+                            baseColor: controlGrid.passiveTileColor
+                            hoverColor: controlGrid.hoverTileColor
+                            Text {
+                                anchors.centerIn: parent
+                                text: Theme.dark ? "Light mode" : "Dark mode"
+                                color: "white"
+                                font.pixelSize: controlGrid.subtitleSize
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: Theme.toggle()
+                            }
+                        }
+
+                        ControlGridCell {
+                            grid: controlGrid
+                            gridColumn: 3
+                            gridRow: 2
+                            radius: controlGrid.tileRadius
+                            baseColor: notch.fakeTimerActive
+                                ? controlGrid.activeTileColor : controlGrid.passiveTileColor
+                            hoverColor: controlGrid.hoverTileColor
+                            Text {
+                                anchors.centerIn: parent
+                                text: notch.fakeTimerActive ? "Timer on" : "Timer"
+                                color: "white"
+                                font.pixelSize: controlGrid.subtitleSize
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: notch.fakeTimerActive = !notch.fakeTimerActive
                             }
                         }
                     }
@@ -1062,7 +1149,7 @@ PanelWindow {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Wallpapers"
                 color: "#8e939d"
-                font.family: "Google Sans Flex"
+                font.family: Config.fontFamily
                 font.pixelSize: 13
                 font.weight: 600
             }

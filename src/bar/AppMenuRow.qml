@@ -132,7 +132,7 @@ Item {
                 color: Theme.menuText
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
-                font.family: "Google Sans Flex"
+                font.family: Config.fontFamily
                 font.pixelSize: 15
                 font.weight: 500
             }

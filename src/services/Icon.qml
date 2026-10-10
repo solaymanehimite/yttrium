@@ -1,9 +1,11 @@
 pragma Singleton
 import Quickshell
 
+import qs.src.services
+
 Singleton {
 
     function getPath(name) {
-        return "file://" + Quickshell.shellDir + "/assets/icons/" + name + ".svg";
+        return "file://" + Config.iconDirectory + "/" + name + ".svg";
     }
 }

@@ -231,7 +231,7 @@ PanelWindow {
                         text: String(root.currentMenu ? root.currentMenu.label : "Back").replace(/_/g, "")
                         color: Theme.menuText
                         elide: Text.ElideRight
-                        font.family: "Google Sans Flex"
+                        font.family: Config.fontFamily
                         font.pixelSize: 15
                         font.weight: 600
                     }

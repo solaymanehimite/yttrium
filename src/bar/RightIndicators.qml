@@ -59,6 +59,7 @@ RowLayout {
             Battery {
                 rasterScale: 1.0
             }
+
         }
 
         MouseArea {

@@ -7,14 +7,13 @@ Item {
     id: battery
 
     property real rasterScale: 1.0
-    readonly property real percentage: Services.PowerBattery.available
-        && Services.PowerBattery.percentage > 0
-        ? Services.PowerBattery.percentage : 100
+    readonly property real percentage: Services.PowerBattery.percentage
+    readonly property bool batteryAvailable: Services.PowerBattery.available
     readonly property color backgroundColor: "#707070"
     readonly property color fillColor: Services.Theme.barText
     readonly property color pinColor: Services.PowerBattery.fullyCharged ? fillColor : backgroundColor
 
-    visible: true
+    visible: batteryAvailable
     width: 22
     height: 14
     Layout.alignment: Qt.AlignVCenter

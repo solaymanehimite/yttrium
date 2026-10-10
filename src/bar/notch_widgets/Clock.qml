@@ -10,7 +10,7 @@ RowLayout {
     TextMetrics {
         id: clockWidth
         text: "00:00"
-        font.family: "Google Sans Flex"
+        font.family: Config.fontFamily
         font.pixelSize: 14
         font.weight: Font.Medium
         font.features: { "tnum": 1 }
@@ -23,7 +23,7 @@ RowLayout {
         Layout.maximumWidth: clockWidth.width
         text: Time.time
         color: Theme.barText
-        font.family: "Google Sans Flex"
+        font.family: Config.fontFamily
         font.pixelSize: 14
         font.weight: Font.Medium
         font.features: { "tnum": 1 }
@@ -33,7 +33,7 @@ RowLayout {
         Layout.alignment: Qt.AlignVCenter
         text: Time.date
         color: Theme.barText
-        font.family: "Google Sans Flex"
+        font.family: Config.fontFamily
         font.pixelSize: 14
         font.weight: Font.Medium
     }

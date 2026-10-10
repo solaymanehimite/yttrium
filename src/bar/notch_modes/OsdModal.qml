@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
+import qs.src.services
 
 // Generic OSD row shown inside the notch when volume / brightness changes.
 // Same 30px height as the idle notch. Left: icon + name.
@@ -36,7 +37,7 @@ RowLayout {
     property real smoothValue: clamped(root.value)
     Behavior on smoothValue {
         NumberAnimation {
-            duration: 180
+            duration: Config.standardAnimation
             easing.type: Easing.OutCubic
         }
     }
@@ -65,7 +66,7 @@ RowLayout {
         text: root.title
         color: "#ffffff"
         Layout.alignment: Qt.AlignVCenter
-        font.family: "Google Sans Flex"
+        font.family: Config.fontFamily
         font.pixelSize: 14
         font.weight: 600
     }

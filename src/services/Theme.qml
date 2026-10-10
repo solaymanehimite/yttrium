@@ -1,9 +1,28 @@
 pragma Singleton
 
 import Quickshell
+import Quickshell.Io
 import QtQuick
 
+import qs.src.services
+
 Singleton {
+    FileView {
+        id: themeFile
+        path: Config.themeFile
+        watchChanges: true
+        printErrors: false
+        onLoaded: {
+            const value = text().trim().toLowerCase();
+            if (value === "dark" || value === "light")
+                Theme.dark = value === "dark";
+        }
+    }
+
+    function save() {
+        themeFile.setText(dark ? "dark\n" : "light\n");
+    }
+
     // The notch deliberately does not use these colors. This palette is only
     // for the top menu bar and its popup menus.
     property bool dark: false
@@ -26,5 +45,6 @@ Singleton {
 
     function toggle() {
         dark = !dark;
+        save();
     }
 }

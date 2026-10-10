@@ -6,11 +6,13 @@ import socket
 import sys
 import time
 
-SOCKET_PATH = os.path.expanduser(
-    os.environ.get(
-        "CLEARTOUCHD_SOCKET",
-        "/home/solaymanehimite/.cache/cleartouchd.sock",
-    )
+cache_home = os.environ.get(
+    "XDG_CACHE_HOME",
+    os.path.join(os.path.expanduser("~"), ".cache"),
+)
+SOCKET_PATH = os.environ.get(
+    "CLEARTOUCHD_SOCKET",
+    os.path.join(cache_home, "cleartouchd.sock"),
 )
 
 while True:
