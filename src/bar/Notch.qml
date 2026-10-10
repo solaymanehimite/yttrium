@@ -4,6 +4,7 @@ import Quickshell.Bluetooth
 import Quickshell.Networking
 import Quickshell.Services.Mpris
 import QtQuick
+import QtQuick.Shapes
 import QtQuick.Effects
 import Quickshell.Wayland
 
@@ -37,6 +38,82 @@ PanelWindow {
         HoverHandler {
             id: tileHover
             cursorShape: Qt.PointingHandCursor
+        }
+    }
+
+    // The two shoulders fill the space above a concave quarter-circle where
+    // the notch meets the top edge. They stay outside surface.clip so the
+    // launcher and OSD keep their existing rounded bottom corners.
+    component NotchShoulder: Shape {
+        required property var notchSurface
+        property bool rightSide: false
+        property real scaleY: 1
+        property real targetSize: 18
+        property real animatedSize: targetSize
+        readonly property real cornerSize: Math.min(animatedSize, Math.max(0, notchSurface.height))
+
+        Behavior on animatedSize {
+            NumberAnimation { duration: Config.standardAnimation; easing.type: Easing.OutCubic }
+        }
+
+        // Tuck one pixel under the main surface to avoid an antialiased seam.
+        x: rightSide ? notchSurface.x + notchSurface.width - 1
+            : notchSurface.x - cornerSize + 1
+        y: notchSurface.y
+        width: cornerSize
+        height: cornerSize
+        visible: notchSurface.height > 0
+        transform: Scale {
+            origin.x: cornerSize / 2
+            origin.y: 0
+            xScale: rightSide ? -1 : 1
+            yScale: scaleY
+        }
+
+        ShapePath {
+            strokeWidth: -1
+            fillGradient: LinearGradient {
+                x1: 0
+                y1: 0
+                x2: 0
+                y2: Math.max(1, notchSurface.height)
+                GradientStop { position: 0.0; color: "#ff000000" }
+                GradientStop { position: 0.72; color: "#f2000000" }
+                GradientStop { position: 1.0; color: "#e6000000" }
+            }
+            startX: 0
+            startY: 0
+            PathLine { x: cornerSize; y: 0 }
+            PathLine { x: cornerSize; y: cornerSize }
+            PathQuad { x: 0; y: 0; controlX: cornerSize; controlY: 0 }
+        }
+    }
+
+    component NotchOsd: Item {
+        required property string mode
+        readonly property bool active: notch.osdMode === mode
+            && !notch.menuOpen && !notch.osdClosing
+
+        anchors {
+            top: parent.top
+            left: parent.left
+            right: parent.right
+            leftMargin: 18
+            rightMargin: 18
+        }
+        height: notch.osdHeight
+        visible: active || opacity > 0
+        opacity: active ? 1 : 0
+        Behavior on opacity {
+            NumberAnimation { duration: Config.modeCrossfade; easing.type: Easing.OutCubic }
+        }
+
+        OsdModal {
+            anchors.fill: parent
+            iconSource: mode === "brightness" ? Icon.getPath("sun") : notch.volumeIcon
+            title: mode === "brightness" ? "Brightness" : (Audio.muted ? "Muted" : "Volume")
+            value: mode === "brightness" ? notch.brightnessFrac : notch.volumeFrac
+            muted: mode === "volume" && Audio.muted
         }
     }
 
@@ -76,9 +153,8 @@ PanelWindow {
     }
 
     screen: bar.screen
-    // Keep the layer surface alive. When idle it sits below normal windows,
-    // so it cannot steal pointer input. Bringing it to the overlay only
-    // happens while the OSD or launcher is active.
+    // Keep the full-screen layer alive below windows while idle. Recreating it
+    // on each OSD or launcher transition causes visible stalls.
     visible: true
     color: "transparent"
 
@@ -171,6 +247,15 @@ PanelWindow {
             apps.push(action);
         return apps.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     }
+    readonly property int osdHeight: 32
+    readonly property int menuCornerRadius: launcherMode === "control" ? 44
+        : (launcherMode === "wallpapers" ? 34 : 24)
+    property real animatedMenuRadius: menuCornerRadius
+    Behavior on animatedMenuRadius {
+        NumberAnimation { duration: Config.standardAnimation; easing.type: Easing.OutCubic }
+    }
+    readonly property int controlInset: 22
+    readonly property real controlTileRadius: animatedMenuRadius - controlInset
     readonly property int menuHeight: launcherMode === "wallpapers"
         ? 280
         : (launcherMode === "control" ? 250
@@ -322,6 +407,7 @@ PanelWindow {
         modeTransitioning = true;
         launcherMode = "control";
         modeAnimationTimer.restart();
+        Qt.callLater(function() { controlPanel.forceActiveFocus(); });
     }
 
     function closeControlCenter() {
@@ -492,6 +578,21 @@ PanelWindow {
         onClicked: notch.toggleMenu()
     }
 
+    NotchShoulder {
+        notchSurface: surface
+        scaleY: verticalScale.yScale
+        targetSize: notch.menuOpen || notch.menuOpening || notch.menuClosing
+            ? (notch.launcherMode === "apps" ? 24 : 30) : 18
+    }
+
+    NotchShoulder {
+        notchSurface: surface
+        rightSide: true
+        scaleY: verticalScale.yScale
+        targetSize: notch.menuOpen || notch.menuOpening || notch.menuClosing
+            ? (notch.launcherMode === "apps" ? 24 : 30) : 18
+    }
+
     Rectangle {
         id: surface
         anchors.horizontalCenter: parent.horizontalCenter
@@ -510,15 +611,20 @@ PanelWindow {
             ? notch.menuHeight
             : (notch.menuClosing
                 ? 0
-                : (notch.osdActive || notch.osdClosing ? 32 : 0))
+                : (notch.osdActive || notch.osdClosing ? notch.osdHeight : 0))
         radius: 0
         topLeftRadius: 0
         topRightRadius: 0
         bottomLeftRadius: notch.menuOpen || notch.menuClosing
-            ? (notch.launcherMode === "control" ? 28 : 18) : height / 2
-        bottomRightRadius: notch.menuOpen || notch.menuClosing
-            ? (notch.launcherMode === "control" ? 28 : 18) : height / 2
-        color: "#000000"
+            ? Math.min(height / 2, notch.animatedMenuRadius) : height / 2
+        bottomRightRadius: bottomLeftRadius
+        color: "transparent"
+        border.width: 0
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: "#ff000000" }
+            GradientStop { position: 0.72; color: "#f2000000" }
+            GradientStop { position: 1.0; color: "#e6000000" }
+        }
         clip: true
         opacity: 1
 
@@ -547,18 +653,13 @@ PanelWindow {
 
         Column {
             id: launcher
-            visible: (notch.menuOpen || notch.menuOpening || notch.menuClosing)
-                && notch.launcherMode === "apps"
-            readonly property real revealProgress: {
-                if (!notch.morphingFromOsd || !notch.menuOpen)
-                    return notch.menuOpen || notch.menuOpening ? 1 : 0;
-                return Math.max(0, Math.min(1,
-                    (surface.height - 32) / Math.max(1, notch.menuHeight - 32)));
-            }
-            opacity: revealProgress
+            readonly property bool active: notch.menuOpen && notch.launcherMode === "apps"
+            visible: active || opacity > 0
+            enabled: active
+            opacity: active ? 1 : 0
             Behavior on opacity {
                 NumberAnimation {
-                    duration: notch.morphingFromOsd ? 0 : 140
+                    duration: Config.modeCrossfade
                     easing.type: Easing.OutCubic
                 }
             }
@@ -566,7 +667,9 @@ PanelWindow {
                 top: parent.top
                 left: parent.left
                 right: parent.right
-                margins: 10
+                leftMargin: 12
+                rightMargin: 12
+                topMargin: 10
             }
             spacing: 4
 
@@ -580,7 +683,7 @@ PanelWindow {
                 color: "#f4f5f7"
                 selectionColor: "#557aa7"
                 clip: true
-                focus: notch.menuOpen
+                focus: launcher.active
                 font.family: Config.fontFamily
                 font.pixelSize: 15
                 verticalAlignment: Text.AlignVCenter
@@ -646,29 +749,22 @@ PanelWindow {
                 width: launcher.width
                 height: Math.max(40, notch.menuHeight - 48)
 
-                Flickable {
-                    id: appListViewport
+                ListView {
+                    id: appListView
                     anchors.fill: parent
                     clip: true
-                    contentWidth: width
-                    contentHeight: appListColumn.implicitHeight
-                    interactive: contentHeight > height
+                    model: notch.launcherEntries
+                    currentIndex: notch.selectedIndex
+                    cacheBuffer: 72
                     boundsBehavior: Flickable.StopAtBounds
 
-                    Column {
-                    id: appListColumn
-                    width: parent.width
-
-                    Repeater {
-                        id: appListRepeater
-                        model: notch.launcherEntries
-
-                        delegate: Rectangle {
+                    delegate: Rectangle {
                             required property var modelData
                             required property int index
-                            width: appListColumn.width
+                            width: appListView.width
                             height: 36
-                            radius: 9
+                            // Keep the highlight concentric with the inset menu edge.
+                            radius: Math.min(height / 2, notch.menuCornerRadius - 12)
                             color: index === notch.selectedIndex || activeFocus
                                 ? "#263b82f6"
                                 : (launcherMouse.containsMouse ? "#263b82f6" : "transparent")
@@ -768,8 +864,6 @@ PanelWindow {
                                     }
                                 }
                             }
-                        }
-                    }
                     }
                 }
 
@@ -782,11 +876,13 @@ PanelWindow {
             readonly property int calendarDays: new Date(Time.year, Time.month + 1, 0).getDate()
             anchors.fill: parent
             anchors.margins: 12
-            visible: notch.menuOpen && notch.launcherMode === "control"
-            focus: visible
-            opacity: visible ? 1 : 0
+            readonly property bool active: notch.menuOpen && notch.launcherMode === "control"
+            visible: active || opacity > 0
+            enabled: active
+            focus: active
+            opacity: active ? 1 : 0
             Behavior on opacity {
-                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: Config.modeCrossfade; easing.type: Easing.OutCubic }
             }
 
             Keys.onEscapePressed: notch.closeControlCenter()
@@ -873,7 +969,8 @@ PanelWindow {
                         readonly property color hoverTileColor: "#162630"
                         readonly property real wideTileSidePadding: 16
                         readonly property real wideTileIconGap: 12
-                        readonly property real tileRadius: 14
+                        // Outer control radius minus the panel's 12 + 10 px inset.
+                        readonly property real tileRadius: notch.controlTileRadius
                         readonly property int titleSize: 14
                         readonly property int subtitleSize: 12
                         readonly property real cellWidth: (width - (columns - 1) * gap) / columns
@@ -1112,11 +1209,13 @@ PanelWindow {
             id: wallpaperPanel
             anchors.fill: parent
             anchors.margins: 16
-            visible: notch.menuOpen && notch.launcherMode === "wallpapers"
-            focus: visible
-            opacity: visible ? 1 : 0
+            readonly property bool active: notch.menuOpen && notch.launcherMode === "wallpapers"
+            visible: active || opacity > 0
+            enabled: active
+            focus: active
+            opacity: active ? 1 : 0
             Behavior on opacity {
-                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: Config.modeCrossfade; easing.type: Easing.OutCubic }
             }
 
             function move(delta) {
@@ -1241,30 +1340,7 @@ PanelWindow {
             }
         }
 
-        OsdModal {
-            anchors {
-                top: parent.top
-                left: parent.left
-                right: parent.right
-                leftMargin: 12
-                rightMargin: 12
-            }
-            height: 32
-            iconSource: notch.osdMode === "brightness" ? Icon.getPath("sun") : notch.volumeIcon
-            title: notch.osdMode === "brightness" ? "Brightness" : (Audio.muted ? "Muted" : "Volume")
-            value: notch.osdMode === "brightness" ? notch.brightnessFrac : notch.volumeFrac
-            muted: notch.osdMode === "volume" && Audio.muted
-            opacity: notch.osdActive
-                ? (notch.morphingFromOsd && notch.menuOpen
-                    ? 1 - launcher.revealProgress
-                    : (!notch.menuOpen ? 1 : 0))
-                : 0
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: notch.morphingFromOsd ? 0 : 140
-                    easing.type: Easing.OutCubic
-                }
-            }
-        }
+        NotchOsd { mode: "volume" }
+        NotchOsd { mode: "brightness" }
     }
 }

@@ -17,4 +17,5 @@ Singleton {
     readonly property int mediumAnimation: 140
     readonly property int shortAnimation: 100
     readonly property int menuAnimation: 220
+    readonly property int modeCrossfade: 200
 }
