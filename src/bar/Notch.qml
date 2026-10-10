@@ -4,6 +4,7 @@ import Quickshell.Bluetooth
 import Quickshell.Networking
 import Quickshell.Services.Mpris
 import QtQuick
+import QtQuick.Layouts
 import QtQuick.Shapes
 import QtQuick.Effects
 import Quickshell.Wayland
@@ -165,11 +166,17 @@ PanelWindow {
         right: true
     }
 
-    WlrLayershell.layer: menuOpen || menuClosing || displaying || osdClosing || transitioning
+    WlrLayershell.layer: menuOpen || menuClosing || displaying || osdClosing
+        || transitioning || mediaPlaying || mediaPaused || mediaClosing
         ? WlrLayer.Overlay : WlrLayer.Bottom
     WlrLayershell.keyboardFocus: menuOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.namespace: "quickshell-notch-launcher"
+    // The persistent media pill must not block input to the desktop beneath
+    // the rest of this full-screen overlay. Menus still close on outside clicks.
+    mask: Region {
+        item: notch.menuOpen || notch.menuClosing ? notch.contentItem : surface
+    }
 
     property string searchQuery: ""
     property string launcherMode: "apps"
@@ -186,14 +193,64 @@ PanelWindow {
     }
     readonly property var mediaPlayer: {
         const players = Mpris.players.values;
+        let paused = null;
         for (let i = 0; i < players.length; i++) {
             if (players[i].isPlaying)
                 return players[i];
+            if (!paused && players[i].playbackState === MprisPlaybackState.Paused)
+                paused = players[i];
         }
-        return players.length > 0 ? players[0] : null;
+        return paused || (players.length > 0 ? players[0] : null);
     }
     readonly property string mediaTitle: mediaPlayer && mediaPlayer.trackTitle
         ? mediaPlayer.trackTitle : "Not Playing"
+    readonly property bool mediaPlaying: !!(mediaPlayer && mediaPlayer.isPlaying)
+    readonly property bool mediaPaused: !!(mediaPlayer
+        && mediaPlayer.playbackState === MprisPlaybackState.Paused)
+    readonly property bool mediaCaptureWanted: mediaPlaying && !menuOpen && !menuClosing
+    readonly property bool mediaCompact: mediaPaused && !mediaHover.hovered
+        && !menuOpen && !menuOpening && !menuClosing && !osdActive
+    property bool mediaClosing: false
+    property var mediaLevels: []
+
+    onMediaPlayingChanged: {
+        if (mediaPlaying) {
+            mediaClosing = false;
+            mediaCloseTimer.stop();
+            if (!menuOpen && !osdActive && !osdClosing) {
+                scaleAnimation.stop();
+                verticalScale.yScale = 1;
+            }
+        } else if (!mediaPaused) {
+            mediaClosing = true;
+            mediaCloseTimer.restart();
+        }
+    }
+
+    onMediaPausedChanged: {
+        if (mediaPaused) {
+            mediaClosing = false;
+            mediaCloseTimer.stop();
+            if (!menuOpen && !osdActive && !osdClosing) {
+                scaleAnimation.stop();
+                verticalScale.yScale = 1;
+            }
+        } else if (!mediaPlaying) {
+            mediaClosing = true;
+            mediaCloseTimer.restart();
+        }
+    }
+
+    onMediaCaptureWantedChanged: {
+        if (mediaCaptureWanted) {
+            if (!mediaCapture.running)
+                mediaCapture.running = true;
+        } else {
+            mediaRetry.stop();
+            mediaCapture.running = false;
+            mediaLevels = [];
+        }
+    }
     readonly property var bluetoothAdapter: Bluetooth.defaultAdapter
     readonly property bool bluetoothChanging: bluetoothAdapter
         && (bluetoothAdapter.state === BluetoothAdapterState.Enabling
@@ -283,7 +340,11 @@ PanelWindow {
     property bool doNotDisturb: false
     property bool fakeTimerActive: false
 
-    Component.onCompleted: refreshWallpapers()
+    Component.onCompleted: {
+        refreshWallpapers();
+        if (mediaCaptureWanted)
+            mediaCapture.running = true;
+    }
 
     function toggleMenu() {
         scaleAnimation.stop();
@@ -304,7 +365,8 @@ PanelWindow {
 
         hideTimer.stop();
         exitTimer.stop();
-        notch.morphingFromOsd = notch.osdActive || notch.osdClosing || notch.displaying;
+        notch.morphingFromOsd = notch.osdActive || notch.osdClosing
+            || notch.displaying || notch.mediaPlaying || notch.mediaPaused;
         notch.osdTransitioning = notch.morphingFromOsd;
         if (!notch.morphingFromOsd)
             notch.osdMode = "";
@@ -502,6 +564,11 @@ PanelWindow {
             return;
 
         scaleAnimation.stop();
+        if (notch.mediaPlaying) {
+            // Both states have the same size: crossfade without shrinking the pill.
+            verticalScale.yScale = 1;
+            return;
+        }
         verticalScale.yScale = 0.01;
         Qt.callLater(function() {
             if (notch.displaying && !notch.menuOpen && !notch.osdClosing) {
@@ -509,6 +576,42 @@ PanelWindow {
                 scaleAnimation.restart();
             }
         });
+    }
+
+    Process {
+        id: mediaCapture
+        command: ["python3", Quickshell.shellDir + "/scripts/media-visualizer.py"]
+        stdout: SplitParser {
+            onRead: function(line) {
+                try {
+                    const levels = JSON.parse(line);
+                    if (Array.isArray(levels) && levels.length === 16)
+                        notch.mediaLevels = levels;
+                } catch (error) {
+                    // Ignore a partial or malformed frame; the next one replaces it.
+                }
+            }
+        }
+        onExited: {
+            notch.mediaLevels = [];
+            if (notch.mediaCaptureWanted)
+                mediaRetry.restart();
+        }
+    }
+
+    Timer {
+        id: mediaRetry
+        interval: 1500
+        onTriggered: {
+            if (notch.mediaCaptureWanted)
+                mediaCapture.running = true;
+        }
+    }
+
+    Timer {
+        id: mediaCloseTimer
+        interval: Config.menuAnimation
+        onTriggered: notch.mediaClosing = false
     }
 
     Timer {
@@ -525,12 +628,14 @@ PanelWindow {
             notch.osdClosing = true;
             scaleAnimation.stop();
             verticalScale.yScale = 1;
-            Qt.callLater(function() {
-                if (notch.osdClosing) {
-                    scaleAnimation.to = 0.01;
-                    scaleAnimation.restart();
-                }
-            });
+            if (!notch.mediaPlaying) {
+                Qt.callLater(function() {
+                    if (notch.osdClosing && !notch.mediaPlaying) {
+                        scaleAnimation.to = 0.01;
+                        scaleAnimation.restart();
+                    }
+                });
+            }
             exitTimer.start();
         }
     }
@@ -598,10 +703,10 @@ PanelWindow {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         width: notch.menuOpen || notch.menuOpening || notch.menuClosing
-            ? notch.menuWidth
-            : 300
+            ? notch.menuWidth : (notch.mediaCompact ? 104 : 300)
         Behavior on width {
             enabled: notch.morphingFromOsd || notch.modeTransitioning
+                || notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
             NumberAnimation {
                 duration: 180
                 easing.type: Easing.OutCubic
@@ -609,9 +714,11 @@ PanelWindow {
         }
         height: notch.menuOpen || notch.menuOpening
             ? notch.menuHeight
-            : (notch.menuClosing
-                ? 0
-                : (notch.osdActive || notch.osdClosing ? notch.osdHeight : 0))
+            : (notch.osdActive || notch.osdClosing
+                ? notch.osdHeight
+                : (notch.mediaCompact ? 12
+                    : (notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
+                        ? notch.osdHeight : 0)))
         radius: 0
         topLeftRadius: 0
         topRightRadius: 0
@@ -627,6 +734,13 @@ PanelWindow {
         }
         clip: true
         opacity: 1
+
+        HoverHandler {
+            id: mediaHover
+            enabled: (notch.mediaPlaying || notch.mediaPaused)
+                && !notch.menuOpen && !notch.menuClosing && !notch.osdActive
+            cursorShape: notch.mediaPaused ? Qt.PointingHandCursor : Qt.ArrowCursor
+        }
 
         transform: Scale {
             id: verticalScale
@@ -1337,6 +1451,151 @@ PanelWindow {
                     : "No wallpapers found"
                 color: "#8e939d"
                 font.pixelSize: 12
+            }
+        }
+
+        Canvas {
+            id: mediaWave
+            anchors {
+                top: parent.top
+                left: parent.left
+                right: parent.right
+            }
+            height: notch.osdHeight
+            visible: mediaPill.visible
+            opacity: mediaPill.opacity
+            onWidthChanged: requestPaint()
+            onHeightChanged: requestPaint()
+
+            Connections {
+                target: notch
+                function onMediaLevelsChanged() { mediaWave.requestPaint(); }
+            }
+
+            onPaint: {
+                const ctx = getContext("2d");
+                ctx.globalCompositeOperation = "source-over";
+                ctx.shadowBlur = 0;
+                ctx.clearRect(0, 0, width, height);
+                // Rest the line below the text; louder bands can rise behind it.
+                const center = height * 0.73;
+                const values = notch.mediaLevels;
+                const points = [{x: 0, y: center}];
+                for (let i = 0; i < 16; i++) {
+                    const level = Math.max(0, Math.min(1, Number(values[i]) || 0));
+                    points.push({
+                        x: (i + 1) * width / 17,
+                        y: center + (i % 2 ? 1 : -1) * level * 8
+                    });
+                }
+                points.push({x: width, y: center});
+
+                function traceWave() {
+                    ctx.beginPath();
+                    ctx.moveTo(points[0].x, points[0].y);
+                    for (let i = 1; i < points.length - 1; i++) {
+                        const next = points[i + 1];
+                        ctx.quadraticCurveTo(points[i].x, points[i].y,
+                            (points[i].x + next.x) / 2, (points[i].y + next.y) / 2);
+                    }
+                    ctx.lineTo(width, center);
+                }
+
+                // Saturated color below the curve: about 75% opacity near
+                // the line and 50% at the bottom, without dimming the line.
+                const fill = ctx.createLinearGradient(0, 0, width, 0);
+                fill.addColorStop(0, "rgba(0,221,204,0)");
+                fill.addColorStop(0.12, "rgba(0,221,204,0.75)");
+                fill.addColorStop(0.5, "rgba(52,98,250,0.75)");
+                fill.addColorStop(0.88, "rgba(174,57,252,0.75)");
+                fill.addColorStop(1, "rgba(174,57,252,0)");
+                traceWave();
+                ctx.lineTo(width, height);
+                ctx.lineTo(0, height);
+                ctx.closePath();
+                ctx.fillStyle = fill;
+                ctx.fill();
+
+                const fade = ctx.createLinearGradient(0, center - 5, 0, height);
+                fade.addColorStop(0, "rgba(255,255,255,1)");
+                fade.addColorStop(1, "rgba(255,255,255,0.67)");
+                ctx.globalCompositeOperation = "destination-in";
+                ctx.fillStyle = fade;
+                ctx.fillRect(0, 0, width, height);
+                ctx.globalCompositeOperation = "source-over";
+
+                const color = ctx.createLinearGradient(0, 0, width, 0);
+                color.addColorStop(0, "rgba(0,221,204,0)");
+                color.addColorStop(0.12, "rgba(0,221,204,0.95)");
+                color.addColorStop(0.5, "rgba(52,98,250,0.95)");
+                color.addColorStop(0.88, "rgba(174,57,252,0.95)");
+                color.addColorStop(1, "rgba(174,57,252,0)");
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1.8;
+                ctx.lineCap = "round";
+                ctx.lineJoin = "round";
+                ctx.shadowColor = "rgba(82,139,255,0.55)";
+                ctx.shadowBlur = 5;
+                traceWave();
+                ctx.stroke();
+            }
+        }
+
+        Item {
+            id: mediaPill
+            readonly property bool active: (notch.mediaPlaying || notch.mediaPaused)
+                && !notch.menuOpen && (!notch.osdActive || notch.osdClosing)
+            anchors {
+                top: parent.top
+                left: parent.left
+                right: parent.right
+                leftMargin: 18
+                rightMargin: 18
+            }
+            height: notch.osdHeight
+            visible: active || opacity > 0
+            enabled: active
+            opacity: active ? 1 : 0
+            Behavior on opacity {
+                NumberAnimation { duration: Config.modeCrossfade; easing.type: Easing.OutCubic }
+            }
+
+            RowLayout {
+                anchors.fill: parent
+                spacing: 8
+                visible: mediaHover.hovered || opacity > 0
+                enabled: mediaHover.hovered
+                opacity: mediaHover.hovered ? 1 : 0
+                Behavior on opacity {
+                    NumberAnimation { duration: Config.modeCrossfade; easing.type: Easing.OutCubic }
+                }
+
+                Image {
+                    Layout.preferredWidth: 16
+                    Layout.preferredHeight: 16
+                    source: Icon.getPath(notch.mediaPaused ? "media/play" : "media/pause")
+                    sourceSize: Qt.size(16, 16)
+                    fillMode: Image.PreserveAspectFit
+
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: notch.mediaPlayer && notch.mediaPlayer.canTogglePlaying
+                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        onClicked: notch.mediaPlayer.togglePlaying()
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: notch.mediaTitle
+                    elide: Text.ElideRight
+                    color: "#f4f5f7"
+                    font.family: Config.fontFamily
+                    font.pixelSize: 13
+                    font.weight: Font.Medium
+                    verticalAlignment: Text.AlignVCenter
+                }
+
             }
         }
 
