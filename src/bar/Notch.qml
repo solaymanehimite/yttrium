@@ -207,11 +207,30 @@ PanelWindow {
     readonly property bool mediaPlaying: !!(mediaPlayer && mediaPlayer.isPlaying)
     readonly property bool mediaPaused: !!(mediaPlayer
         && mediaPlayer.playbackState === MprisPlaybackState.Paused)
-    readonly property bool mediaCaptureWanted: mediaPlaying && !menuOpen && !menuClosing
-    readonly property bool mediaCompact: mediaPaused && !mediaHover.hovered
-        && !menuOpen && !menuOpening && !menuClosing && !osdActive
+    readonly property string mediaIconName: {
+        if (!mediaPlayer)
+            return "audio-x-generic";
+        const id = String(mediaPlayer.desktopEntry || "");
+        const entry = id ? DesktopEntries.byId(id) : null;
+        if (entry && entry.icon)
+            return entry.icon;
+        const name = id.toLowerCase();
+        const entries = DesktopEntries.applications.values || [];
+        for (let i = 0; i < entries.length; i++) {
+            const candidate = entries[i];
+            if (candidate && String(candidate.id).toLowerCase()
+                    .replace(/\.desktop$/, "").endsWith("." + name))
+                return candidate.icon || id;
+        }
+        return id || "audio-x-generic";
+    }
+    readonly property int mediaWidth: 216
+    readonly property var mediaBarSteps: [
+        [4, 8, 12, 7, 5], [7, 11, 5, 10, 4], [10, 5, 9, 4, 11],
+        [5, 12, 6, 9, 7], [8, 4, 11, 6, 10], [6, 9, 4, 12, 5]
+    ]
+    property int mediaBarFrame: 0
     property bool mediaClosing: false
-    property var mediaLevels: []
 
     onMediaPlayingChanged: {
         if (mediaPlaying) {
@@ -241,16 +260,6 @@ PanelWindow {
         }
     }
 
-    onMediaCaptureWantedChanged: {
-        if (mediaCaptureWanted) {
-            if (!mediaCapture.running)
-                mediaCapture.running = true;
-        } else {
-            mediaRetry.stop();
-            mediaCapture.running = false;
-            mediaLevels = [];
-        }
-    }
     readonly property var bluetoothAdapter: Bluetooth.defaultAdapter
     readonly property bool bluetoothChanging: bluetoothAdapter
         && (bluetoothAdapter.state === BluetoothAdapterState.Enabling
@@ -340,11 +349,7 @@ PanelWindow {
     property bool doNotDisturb: false
     property bool fakeTimerActive: false
 
-    Component.onCompleted: {
-        refreshWallpapers();
-        if (mediaCaptureWanted)
-            mediaCapture.running = true;
-    }
+    Component.onCompleted: refreshWallpapers()
 
     function toggleMenu() {
         scaleAnimation.stop();
@@ -564,8 +569,8 @@ PanelWindow {
             return;
 
         scaleAnimation.stop();
-        if (notch.mediaPlaying) {
-            // Both states have the same size: crossfade without shrinking the pill.
+        if (notch.mediaPlaying || notch.mediaPaused) {
+            // Keep the existing pill height while the OSD crossfades in.
             verticalScale.yScale = 1;
             return;
         }
@@ -578,34 +583,14 @@ PanelWindow {
         });
     }
 
-    Process {
-        id: mediaCapture
-        command: ["python3", Quickshell.shellDir + "/scripts/media-visualizer.py"]
-        stdout: SplitParser {
-            onRead: function(line) {
-                try {
-                    const levels = JSON.parse(line);
-                    if (Array.isArray(levels) && levels.length === 16)
-                        notch.mediaLevels = levels;
-                } catch (error) {
-                    // Ignore a partial or malformed frame; the next one replaces it.
-                }
-            }
-        }
-        onExited: {
-            notch.mediaLevels = [];
-            if (notch.mediaCaptureWanted)
-                mediaRetry.restart();
-        }
-    }
-
+    // Five stepped bars update about six times per second, without audio capture or Canvas.
     Timer {
-        id: mediaRetry
-        interval: 1500
-        onTriggered: {
-            if (notch.mediaCaptureWanted)
-                mediaCapture.running = true;
-        }
+        interval: 170
+        running: notch.mediaPlaying && !notch.menuOpen && !notch.menuClosing
+            && !notch.osdActive && !mediaHover.hovered
+        repeat: true
+        onTriggered: notch.mediaBarFrame = (notch.mediaBarFrame + 1)
+            % notch.mediaBarSteps.length
     }
 
     Timer {
@@ -628,9 +613,9 @@ PanelWindow {
             notch.osdClosing = true;
             scaleAnimation.stop();
             verticalScale.yScale = 1;
-            if (!notch.mediaPlaying) {
+            if (!notch.mediaPlaying && !notch.mediaPaused) {
                 Qt.callLater(function() {
-                    if (notch.osdClosing && !notch.mediaPlaying) {
+                    if (notch.osdClosing && !notch.mediaPlaying && !notch.mediaPaused) {
                         scaleAnimation.to = 0.01;
                         scaleAnimation.restart();
                     }
@@ -702,8 +687,12 @@ PanelWindow {
         id: surface
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        width: notch.menuOpen || notch.menuOpening || notch.menuClosing
-            ? notch.menuWidth : (notch.mediaCompact ? 104 : 300)
+        width: notch.menuOpen || notch.menuOpening
+            || (notch.menuClosing && !notch.mediaPlaying && !notch.mediaPaused)
+            ? notch.menuWidth
+            : (notch.osdActive && !notch.osdClosing
+                ? 300 : (notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
+                    ? notch.mediaWidth : 300))
         Behavior on width {
             enabled: notch.morphingFromOsd || notch.modeTransitioning
                 || notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
@@ -714,11 +703,8 @@ PanelWindow {
         }
         height: notch.menuOpen || notch.menuOpening
             ? notch.menuHeight
-            : (notch.osdActive || notch.osdClosing
-                ? notch.osdHeight
-                : (notch.mediaCompact ? 12
-                    : (notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
-                        ? notch.osdHeight : 0)))
+            : (notch.osdActive || notch.osdClosing || notch.mediaPlaying
+                || notch.mediaPaused || notch.mediaClosing ? notch.osdHeight : 0)
         radius: 0
         topLeftRadius: 0
         topRightRadius: 0
@@ -1454,93 +1440,6 @@ PanelWindow {
             }
         }
 
-        Canvas {
-            id: mediaWave
-            anchors {
-                top: parent.top
-                left: parent.left
-                right: parent.right
-            }
-            height: notch.osdHeight
-            visible: mediaPill.visible
-            opacity: mediaPill.opacity
-            onWidthChanged: requestPaint()
-            onHeightChanged: requestPaint()
-
-            Connections {
-                target: notch
-                function onMediaLevelsChanged() { mediaWave.requestPaint(); }
-            }
-
-            onPaint: {
-                const ctx = getContext("2d");
-                ctx.globalCompositeOperation = "source-over";
-                ctx.shadowBlur = 0;
-                ctx.clearRect(0, 0, width, height);
-                // Rest the line below the text; louder bands can rise behind it.
-                const center = height * 0.73;
-                const values = notch.mediaLevels;
-                const points = [{x: 0, y: center}];
-                for (let i = 0; i < 16; i++) {
-                    const level = Math.max(0, Math.min(1, Number(values[i]) || 0));
-                    points.push({
-                        x: (i + 1) * width / 17,
-                        y: center + (i % 2 ? 1 : -1) * level * 8
-                    });
-                }
-                points.push({x: width, y: center});
-
-                function traceWave() {
-                    ctx.beginPath();
-                    ctx.moveTo(points[0].x, points[0].y);
-                    for (let i = 1; i < points.length - 1; i++) {
-                        const next = points[i + 1];
-                        ctx.quadraticCurveTo(points[i].x, points[i].y,
-                            (points[i].x + next.x) / 2, (points[i].y + next.y) / 2);
-                    }
-                    ctx.lineTo(width, center);
-                }
-
-                // Saturated color below the curve: about 75% opacity near
-                // the line and 50% at the bottom, without dimming the line.
-                const fill = ctx.createLinearGradient(0, 0, width, 0);
-                fill.addColorStop(0, "rgba(0,221,204,0)");
-                fill.addColorStop(0.12, "rgba(0,221,204,0.75)");
-                fill.addColorStop(0.5, "rgba(52,98,250,0.75)");
-                fill.addColorStop(0.88, "rgba(174,57,252,0.75)");
-                fill.addColorStop(1, "rgba(174,57,252,0)");
-                traceWave();
-                ctx.lineTo(width, height);
-                ctx.lineTo(0, height);
-                ctx.closePath();
-                ctx.fillStyle = fill;
-                ctx.fill();
-
-                const fade = ctx.createLinearGradient(0, center - 5, 0, height);
-                fade.addColorStop(0, "rgba(255,255,255,1)");
-                fade.addColorStop(1, "rgba(255,255,255,0.67)");
-                ctx.globalCompositeOperation = "destination-in";
-                ctx.fillStyle = fade;
-                ctx.fillRect(0, 0, width, height);
-                ctx.globalCompositeOperation = "source-over";
-
-                const color = ctx.createLinearGradient(0, 0, width, 0);
-                color.addColorStop(0, "rgba(0,221,204,0)");
-                color.addColorStop(0.12, "rgba(0,221,204,0.95)");
-                color.addColorStop(0.5, "rgba(52,98,250,0.95)");
-                color.addColorStop(0.88, "rgba(174,57,252,0.95)");
-                color.addColorStop(1, "rgba(174,57,252,0)");
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 1.8;
-                ctx.lineCap = "round";
-                ctx.lineJoin = "round";
-                ctx.shadowColor = "rgba(82,139,255,0.55)";
-                ctx.shadowBlur = 5;
-                traceWave();
-                ctx.stroke();
-            }
-        }
-
         Item {
             id: mediaPill
             readonly property bool active: (notch.mediaPlaying || notch.mediaPaused)
@@ -1563,26 +1462,15 @@ PanelWindow {
             RowLayout {
                 anchors.fill: parent
                 spacing: 8
-                visible: mediaHover.hovered || opacity > 0
-                enabled: mediaHover.hovered
-                opacity: mediaHover.hovered ? 1 : 0
-                Behavior on opacity {
-                    NumberAnimation { duration: Config.modeCrossfade; easing.type: Easing.OutCubic }
-                }
 
                 Image {
                     Layout.preferredWidth: 16
                     Layout.preferredHeight: 16
-                    source: Icon.getPath(notch.mediaPaused ? "media/play" : "media/pause")
+                    source: Quickshell.iconPath(notch.mediaIconName, true)
                     sourceSize: Qt.size(16, 16)
                     fillMode: Image.PreserveAspectFit
-
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: notch.mediaPlayer && notch.mediaPlayer.canTogglePlaying
-                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                        onClicked: notch.mediaPlayer.togglePlaying()
-                    }
+                    asynchronous: true
+                    smooth: true
                 }
 
                 Text {
@@ -1594,8 +1482,68 @@ PanelWindow {
                     font.pixelSize: 13
                     font.weight: Font.Medium
                     verticalAlignment: Text.AlignVCenter
+                    opacity: mediaHover.hovered ? 1 : 0
+                    Behavior on opacity {
+                        NumberAnimation { duration: Config.modeCrossfade; easing.type: Easing.OutCubic }
+                    }
                 }
 
+                Item {
+                    Layout.preferredWidth: 18
+                    Layout.preferredHeight: 16
+
+                    Row {
+                        anchors.centerIn: parent
+                        height: 12
+                        spacing: 2
+                        visible: opacity > 0
+                        opacity: notch.mediaPlaying && !mediaHover.hovered ? 1 : 0
+                        Behavior on opacity {
+                            NumberAnimation { duration: Config.mediumAnimation }
+                        }
+                        Repeater {
+                            model: 5
+                            Rectangle {
+                                required property int index
+                                anchors.bottom: parent.bottom
+                                width: 2
+                                height: {
+                                    const steps = notch.mediaBarSteps;
+                                    const frame = steps && steps.length
+                                        ? steps[notch.mediaBarFrame % steps.length] : null;
+                                    return frame ? frame[index] : 4;
+                                }
+                                radius: 1
+                                color: ["#35dfcf", "#4ed5ee", "#649bff", "#9973f3", "#c470f6"][index]
+                            }
+                        }
+                    }
+
+                    Image {
+                        anchors.centerIn: parent
+                        width: 16
+                        height: 16
+                        source: Icon.getPath(notch.mediaPaused ? "media/play" : "media/pause")
+                        sourceSize: Qt.size(16, 16)
+                        fillMode: Image.PreserveAspectFit
+                        visible: opacity > 0
+                        opacity: notch.mediaPaused || (notch.mediaPlaying && mediaHover.hovered) ? 1 : 0
+                        Behavior on opacity {
+                            NumberAnimation { duration: Config.mediumAnimation }
+                        }
+                    }
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            enabled: mediaPill.active && !notch.menuClosing && !notch.osdActive
+                && !!notch.mediaPlayer && notch.mediaPlayer.canTogglePlaying
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                if (notch.mediaPlayer)
+                    notch.mediaPlayer.togglePlaying();
             }
         }
 
