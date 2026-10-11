@@ -54,7 +54,11 @@ PanelWindow {
         readonly property real cornerSize: Math.min(animatedSize, Math.max(0, notchSurface.height))
 
         Behavior on animatedSize {
-            NumberAnimation { duration: Config.standardAnimation; easing.type: Easing.OutCubic }
+            NumberAnimation {
+                duration: notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
+                    ? 145 : Config.standardAnimation
+                easing.type: Easing.OutCubic
+            }
         }
 
         // Tuck one pixel under the main surface to avoid an antialiased seam.
@@ -99,8 +103,8 @@ PanelWindow {
             top: parent.top
             left: parent.left
             right: parent.right
-            leftMargin: 18
-            rightMargin: 18
+            leftMargin: notch.pillContentInset
+            rightMargin: notch.pillContentInset
         }
         height: notch.osdHeight
         visible: active || opacity > 0
@@ -314,6 +318,8 @@ PanelWindow {
         return apps.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     }
     readonly property int osdHeight: 32
+    readonly property int pillContentInset: 12
+    readonly property int pillShoulderSize: 12
     readonly property int menuCornerRadius: launcherMode === "control" ? 44
         : (launcherMode === "wallpapers" ? 34 : 24)
     property real animatedMenuRadius: menuCornerRadius
@@ -583,9 +589,9 @@ PanelWindow {
         });
     }
 
-    // Five stepped bars update about six times per second, without audio capture or Canvas.
+    // Five short bars update at four steps per second, without audio capture or Canvas.
     Timer {
-        interval: 170
+        interval: 240
         running: notch.mediaPlaying && !notch.menuOpen && !notch.menuClosing
             && !notch.osdActive && !mediaHover.hovered
         repeat: true
@@ -671,16 +677,22 @@ PanelWindow {
     NotchShoulder {
         notchSurface: surface
         scaleY: verticalScale.yScale
-        targetSize: notch.menuOpen || notch.menuOpening || notch.menuClosing
-            ? (notch.launcherMode === "apps" ? 24 : 30) : 18
+        targetSize: notch.menuOpen || notch.menuOpening
+            || (notch.menuClosing && !notch.mediaPlaying && !notch.mediaPaused)
+            ? (notch.launcherMode === "apps" ? 24 : 30)
+            : (notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
+                || notch.osdActive || notch.osdClosing ? notch.pillShoulderSize : 18)
     }
 
     NotchShoulder {
         notchSurface: surface
         rightSide: true
         scaleY: verticalScale.yScale
-        targetSize: notch.menuOpen || notch.menuOpening || notch.menuClosing
-            ? (notch.launcherMode === "apps" ? 24 : 30) : 18
+        targetSize: notch.menuOpen || notch.menuOpening
+            || (notch.menuClosing && !notch.mediaPlaying && !notch.mediaPaused)
+            ? (notch.launcherMode === "apps" ? 24 : 30)
+            : (notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
+                || notch.osdActive || notch.osdClosing ? notch.pillShoulderSize : 18)
     }
 
     Rectangle {
@@ -697,7 +709,8 @@ PanelWindow {
             enabled: notch.morphingFromOsd || notch.modeTransitioning
                 || notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
             NumberAnimation {
-                duration: 180
+                duration: notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
+                    ? 145 : Config.standardAnimation
                 easing.type: Easing.OutCubic
             }
         }
@@ -746,7 +759,8 @@ PanelWindow {
 
         Behavior on height {
             NumberAnimation {
-                duration: 180
+                duration: notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
+                    ? 145 : Config.standardAnimation
                 easing.type: Easing.OutCubic
             }
         }
@@ -1448,15 +1462,15 @@ PanelWindow {
                 top: parent.top
                 left: parent.left
                 right: parent.right
-                leftMargin: 18
-                rightMargin: 18
+                leftMargin: notch.pillContentInset
+                rightMargin: notch.pillContentInset
             }
             height: notch.osdHeight
             visible: active || opacity > 0
             enabled: active
             opacity: active ? 1 : 0
             Behavior on opacity {
-                NumberAnimation { duration: Config.modeCrossfade; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
             }
 
             RowLayout {
@@ -1514,7 +1528,10 @@ PanelWindow {
                                     return frame ? frame[index] : 4;
                                 }
                                 radius: 1
-                                color: ["#35dfcf", "#4ed5ee", "#649bff", "#9973f3", "#c470f6"][index]
+                                color: "#f4f5f7"
+                                Behavior on height {
+                                    NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                                }
                             }
                         }
                     }
