@@ -26,15 +26,16 @@ PanelWindow {
         property color baseColor: "transparent"
         property color hoverColor: baseColor
 
-        x: gridColumn * (grid.cellWidth + grid.gap)
-        y: gridRow * (grid.cellHeight + grid.gap)
+        x: (grid.width - (grid.columns * grid.cellWidth
+            + (grid.columns - 1) * grid.gap)) / 2
+            + gridColumn * (grid.cellWidth + grid.gap)
+        y: (grid.height - (grid.rows * grid.cellHeight
+            + (grid.rows - 1) * grid.gap)) / 2
+            + gridRow * (grid.cellHeight + grid.gap)
         width: columnSpan * grid.cellWidth + (columnSpan - 1) * grid.gap
         height: rowSpan * grid.cellHeight + (rowSpan - 1) * grid.gap
         color: tileHover.hovered ? hoverColor : baseColor
 
-        Behavior on color {
-            ColorAnimation { duration: Config.shortAnimation }
-        }
 
         HoverHandler {
             id: tileHover
@@ -190,10 +191,7 @@ PanelWindow {
     readonly property string wifiStatus: {
         if (!Networking.wifiHardwareEnabled)
             return "Unavailable";
-        if (!Networking.wifiEnabled)
-            return "Off";
-        return NetworkService.connectedNetwork
-            ? NetworkService.connectedNetwork.name : "Not connected";
+        return Networking.wifiEnabled ? "On" : "Off";
     }
     readonly property var mediaPlayer: {
         const players = Mpris.players.values;
@@ -284,7 +282,7 @@ PanelWindow {
         return bluetoothAdapter.enabled ? "On" : "Off";
     }
     readonly property int menuWidth: Math.round((launcherMode === "wallpapers"
-        ? 760 : (launcherMode === "control" ? 620 : 420)) * Config.uiScale)
+        ? 640 : (launcherMode === "control" ? 560 : 420)) * Config.uiScale)
     readonly property bool actionSearch: notch.searchQuery.startsWith(">")
     readonly property var launcherEntries: {
         const query = notch.searchQuery.trim().toLowerCase();
@@ -327,8 +325,8 @@ PanelWindow {
     readonly property int controlInset: Math.round(22 * Config.uiScale)
     readonly property real controlTileRadius: animatedMenuRadius - controlInset
     readonly property int menuHeight: Math.round((launcherMode === "wallpapers"
-        ? 280
-        : (launcherMode === "control" ? 250
+        ? 250
+        : (launcherMode === "control" ? 230
             : Math.max(94, Math.min(360,
                 58 + Math.max(1, launcherEntries.length) * 36))) ) * Config.uiScale)
     property string osdMode: ""
@@ -987,7 +985,7 @@ PanelWindow {
             readonly property int calendarFirstDay: (new Date(Time.year, Time.month, 1).getDay() + 6) % 7
             readonly property int calendarDays: new Date(Time.year, Time.month + 1, 0).getDate()
             anchors.fill: parent
-            anchors.margins: 12
+            anchors.margins: 10
             readonly property bool active: notch.menuOpen && notch.launcherMode === "control"
             visible: active || opacity > 0
             enabled: active
@@ -1001,19 +999,20 @@ PanelWindow {
 
             Column {
                 anchors.fill: parent
-                anchors.margins: 10
-                spacing: 8
+                anchors.margins: 8
+                spacing: 6
 
                 Row {
                     id: controlContent
                     width: parent.width
                     height: parent.height
-                    spacing: 10
+                    spacing: 12
 
                     Column {
                         id: calendarColumn
-                        width: 220
-                        spacing: 10
+                        width: 200
+                        spacing: 8
+                        transform: Translate { x: 8 }
 
                         Text {
                             text: Qt.formatDate(new Date(Time.year, Time.month, 1), "MMMM").toUpperCase()
@@ -1026,7 +1025,7 @@ PanelWindow {
                         }
 
                         Row {
-                            spacing: 6
+                            spacing: 8
                             Repeater {
                                 model: ["M", "T", "W", "T", "F", "S", "S"]
                                 Text {
@@ -1043,8 +1042,8 @@ PanelWindow {
 
                         Grid {
                             columns: 7
-                            columnSpacing: 6
-                            rowSpacing: 5
+                            columnSpacing: 8
+                            rowSpacing: 6
                             Repeater {
                                 model: 42
                                 Text {
@@ -1076,34 +1075,43 @@ PanelWindow {
 
                     Item {
                         id: controlGrid
-                        readonly property real gap: 4
+                        readonly property real gap: 8
                         readonly property int columns: 4
                         readonly property int rows: 3
-                        readonly property color activeTileColor: "#101a22"
-                        readonly property color passiveTileColor: "#0b1218"
-                        readonly property color hoverTileColor: "#162630"
-                        readonly property real wideTileSidePadding: 16
+                        readonly property color activeTileColor: "#f6f8fb"
+                        readonly property color passiveTileColor: "transparent"
+                        readonly property color hoverTileColor: "#1c2026"
+                        readonly property real wideTileSidePadding: 20
                         readonly property real wideTileIconGap: 12
                         // Outer control radius minus the panel's 12 + 10 px inset.
                         readonly property real tileRadius: notch.controlTileRadius
                         readonly property int titleSize: 14
                         readonly property int subtitleSize: 12
-                        readonly property real cellWidth: (width - (columns - 1) * gap) / columns
-                        readonly property real cellHeight: (height - (rows - 1) * gap) / rows
+                        readonly property real cellSize: Math.min(
+                            (width - (columns - 1) * gap) / columns,
+                            (height - (rows - 1) * gap) / rows)
+                        readonly property real cellWidth: cellSize
+                        readonly property real cellHeight: cellSize
 
-                        width: controlContent.width - calendarColumn.width - controlContent.spacing
-                        height: controlContent.height
+                        width: controlContent.width - calendarColumn.width - controlContent.spacing - 24
+                        height: controlContent.height - 8
+                        y: 8
+                        transform: Translate {
+                            x: 24 + (controlGrid.width
+                                - (controlGrid.columns * controlGrid.cellWidth
+                                    + (controlGrid.columns - 1) * controlGrid.gap)) / 2
+                        }
 
                         ControlGridCell {
                             grid: controlGrid
                             gridColumn: 0
                             gridRow: 0
                             columnSpan: 2
-                            radius: controlGrid.tileRadius
+                            radius: height / 2
                             baseColor: Networking.wifiEnabled
                                 ? controlGrid.activeTileColor
                                 : controlGrid.passiveTileColor
-                            hoverColor: controlGrid.hoverTileColor
+                            hoverColor: Networking.wifiEnabled ? "#d8dde3" : controlGrid.hoverTileColor
                             opacity: Networking.wifiHardwareEnabled ? 1 : 0.55
                             Row {
                                 anchors.left: parent.left
@@ -1113,15 +1121,16 @@ PanelWindow {
                                 anchors.rightMargin: controlGrid.wideTileSidePadding
                                 spacing: controlGrid.wideTileIconGap
                                 NotchWidgets.Network {
-                                    width: 20
-                                    height: 20
+                                    darkIcon: Networking.wifiEnabled
+                                    width: 18
+                                    height: 18
                                     anchors.verticalCenter: parent.verticalCenter
-                                    rasterScale: 20 / 15
+                                    rasterScale: 18 / 15
                                 }
                                 Column {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    Text { text: "Wi-Fi"; color: "white"; font.family: Config.fontFamily; font.pixelSize: Math.round(controlGrid.titleSize * Config.uiScale) }
-                                    Text { text: notch.wifiStatus; color: "#d8f1ff"; font.family: Config.fontFamily; font.pixelSize: Math.round(controlGrid.subtitleSize * Config.uiScale) }
+                                    Text { text: "Wi-Fi"; color: Networking.wifiEnabled ? "#111214" : "white"; font.family: Config.fontFamily; font.pixelSize: Math.round(13 * Config.uiScale); font.weight: 550 }
+                                    Text { text: notch.wifiStatus; color: Networking.wifiEnabled ? "#4b5563" : "#d8f1ff"; font.family: Config.fontFamily; font.pixelSize: Math.round(11 * Config.uiScale) }
                                 }
                             }
 
@@ -1138,12 +1147,13 @@ PanelWindow {
                             gridColumn: 0
                             gridRow: 1
                             columnSpan: 2
-                            radius: controlGrid.tileRadius
+                            radius: height / 2
                             baseColor: notch.bluetoothAdapter
                                 && (notch.bluetoothAdapter.enabled || notch.bluetoothChanging)
                                 ? controlGrid.activeTileColor
                                 : controlGrid.passiveTileColor
-                            hoverColor: controlGrid.hoverTileColor
+                            hoverColor: notch.bluetoothAdapter && (notch.bluetoothAdapter.enabled || notch.bluetoothChanging)
+                                ? "#d8dde3" : controlGrid.hoverTileColor
                             opacity: notch.bluetoothAdapter ? 1 : 0.55
 
                             Row {
@@ -1154,18 +1164,19 @@ PanelWindow {
                                 anchors.rightMargin: controlGrid.wideTileSidePadding
                                 spacing: controlGrid.wideTileIconGap
                                 Image {
-                                    width: 20
-                                    height: 20
+                                    width: 18
+                                    height: 18
                                     anchors.verticalCenter: parent.verticalCenter
-                                    source: Icon.getPath(notch.bluetoothIconName)
-                                    sourceSize: Qt.size(20, 20)
+                                    source: Icon.getPath(notch.bluetoothIconName
+                                        + (notch.bluetoothAdapter && (notch.bluetoothAdapter.enabled || notch.bluetoothChanging) ? "_black" : ""))
+                                    sourceSize: Qt.size(18, 18)
                                     fillMode: Image.PreserveAspectFit
                                     smooth: true
                                 }
                                 Column {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    Text { text: "Bluetooth"; color: "white"; font.family: Config.fontFamily; font.pixelSize: Math.round(controlGrid.titleSize * Config.uiScale) }
-                                    Text { text: notch.bluetoothStatus; color: "#d8f1ff"; font.family: Config.fontFamily; font.pixelSize: Math.round(controlGrid.subtitleSize * Config.uiScale) }
+                                    Text { text: "Bluetooth"; color: notch.bluetoothAdapter && (notch.bluetoothAdapter.enabled || notch.bluetoothChanging) ? "#111214" : "white"; font.family: Config.fontFamily; font.pixelSize: Math.round(13 * Config.uiScale); font.weight: 550 }
+                                    Text { text: notch.bluetoothStatus; color: notch.bluetoothAdapter && (notch.bluetoothAdapter.enabled || notch.bluetoothChanging) ? "#4b5563" : "#d8f1ff"; font.family: Config.fontFamily; font.pixelSize: Math.round(11 * Config.uiScale) }
                                 }
                             }
 
@@ -1206,15 +1217,6 @@ PanelWindow {
                                 spacing: 7
 
                                 MediaControl {
-                                    iconName: "media/repeat"
-                                    enabled: notch.mediaPlayer && notch.mediaPlayer.loopSupported
-                                    active: enabled && notch.mediaPlayer.loopState !== MprisLoopState.None
-                                    onTriggered: {
-                                        notch.mediaPlayer.loopState = active
-                                            ? MprisLoopState.None : MprisLoopState.Playlist;
-                                    }
-                                }
-                                MediaControl {
                                     iconName: "media/previous"
                                     enabled: notch.mediaPlayer && notch.mediaPlayer.canGoPrevious
                                     onTriggered: notch.mediaPlayer.previous()
@@ -1231,11 +1233,6 @@ PanelWindow {
                                     enabled: notch.mediaPlayer && notch.mediaPlayer.canGoNext
                                     onTriggered: notch.mediaPlayer.next()
                                 }
-                                MediaControl {
-                                    iconName: "media/playlist"
-                                    enabled: notch.mediaPlayer && notch.mediaPlayer.canRaise
-                                    onTriggered: notch.mediaPlayer.raise()
-                                }
                             }
                         }
 
@@ -1243,16 +1240,17 @@ PanelWindow {
                             grid: controlGrid
                             gridColumn: 0
                             gridRow: 2
-                            radius: controlGrid.tileRadius
-                            baseColor: notch.doNotDisturb
-                                ? controlGrid.activeTileColor : controlGrid.passiveTileColor
-                            hoverColor: controlGrid.hoverTileColor
-                            Text {
+                            radius: width / 2
+                            baseColor: notch.doNotDisturb ? "#f6f8fb" : "transparent"
+                            hoverColor: notch.doNotDisturb ? "#d8dde3" : controlGrid.hoverTileColor
+                            Image {
                                 anchors.centerIn: parent
-                                text: "Do not disturb"
-                                color: "white"
-                                font.family: Config.fontFamily
-                                font.pixelSize: Math.round(controlGrid.subtitleSize * Config.uiScale)
+                                width: Math.round(16 * Config.uiScale)
+                                height: Math.round(16 * Config.uiScale)
+                                source: Icon.getPath(notch.doNotDisturb
+                                    ? "do-not-disturb_black" : "do-not-disturb")
+                                sourceSize: Qt.size(width, height)
+                                fillMode: Image.PreserveAspectFit
                             }
                             MouseArea {
                                 anchors.fill: parent
@@ -1264,15 +1262,16 @@ PanelWindow {
                             grid: controlGrid
                             gridColumn: 1
                             gridRow: 2
-                            radius: controlGrid.tileRadius
+                            radius: width / 2
                             baseColor: controlGrid.passiveTileColor
                             hoverColor: controlGrid.hoverTileColor
-                            Text {
+                            Image {
                                 anchors.centerIn: parent
-                                text: "Search"
-                                color: "white"
-                                font.family: Config.fontFamily
-                                font.pixelSize: Math.round(controlGrid.subtitleSize * Config.uiScale)
+                                width: Math.round(16 * Config.uiScale)
+                                height: Math.round(16 * Config.uiScale)
+                                source: Icon.getPath("search_white")
+                                sourceSize: Qt.size(width, height)
+                                fillMode: Image.PreserveAspectFit
                             }
                             MouseArea {
                                 anchors.fill: parent
@@ -1284,15 +1283,16 @@ PanelWindow {
                             grid: controlGrid
                             gridColumn: 2
                             gridRow: 2
-                            radius: controlGrid.tileRadius
-                            baseColor: controlGrid.passiveTileColor
-                            hoverColor: controlGrid.hoverTileColor
-                            Text {
+                            radius: width / 2
+                            baseColor: Theme.dark ? "#f6f8fb" : "transparent"
+                            hoverColor: Theme.dark ? "#d8dde3" : controlGrid.hoverTileColor
+                            Image {
                                 anchors.centerIn: parent
-                                text: Theme.dark ? "Light mode" : "Dark mode"
-                                color: "white"
-                                font.family: Config.fontFamily
-                                font.pixelSize: Math.round(controlGrid.subtitleSize * Config.uiScale)
+                                width: Math.round(16 * Config.uiScale)
+                                height: Math.round(16 * Config.uiScale)
+                                source: Icon.getPath(Theme.dark ? "theme_black" : "theme")
+                                sourceSize: Qt.size(width, height)
+                                fillMode: Image.PreserveAspectFit
                             }
                             MouseArea {
                                 anchors.fill: parent
@@ -1304,16 +1304,17 @@ PanelWindow {
                             grid: controlGrid
                             gridColumn: 3
                             gridRow: 2
-                            radius: controlGrid.tileRadius
+                            radius: width / 2
                             baseColor: notch.fakeTimerActive
                                 ? controlGrid.activeTileColor : controlGrid.passiveTileColor
-                            hoverColor: controlGrid.hoverTileColor
-                            Text {
+                            hoverColor: notch.fakeTimerActive ? "#d8dde3" : controlGrid.hoverTileColor
+                            Image {
                                 anchors.centerIn: parent
-                                text: notch.fakeTimerActive ? "Timer on" : "Timer"
-                                color: "white"
-                                font.family: Config.fontFamily
-                                font.pixelSize: Math.round(controlGrid.subtitleSize * Config.uiScale)
+                                width: Math.round(16 * Config.uiScale)
+                                height: Math.round(16 * Config.uiScale)
+                                source: Icon.getPath(notch.fakeTimerActive ? "timer_dark" : "timer_light")
+                                sourceSize: Qt.size(width, height)
+                                fillMode: Image.PreserveAspectFit
                             }
                             MouseArea {
                                 anchors.fill: parent
@@ -1328,7 +1329,7 @@ PanelWindow {
         Item {
             id: wallpaperPanel
             anchors.fill: parent
-            anchors.margins: 16
+            anchors.margins: 12
             readonly property bool active: notch.menuOpen && notch.launcherMode === "wallpapers"
             visible: active || opacity > 0
             enabled: active
