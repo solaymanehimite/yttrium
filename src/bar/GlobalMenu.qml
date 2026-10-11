@@ -440,7 +440,7 @@ Pane {
                 color: Theme.barText
                 elide: Text.ElideRight
                 font.family: Config.fontFamily
-                font.pixelSize: 16
+                font.pixelSize: Math.round(16 * Config.uiScale)
                 font.weight: 650
             }
 
@@ -506,7 +506,7 @@ Pane {
                     color: menuButton.itemEnabled ? Theme.barText : Theme.barMutedText
                     elide: Text.ElideRight
                     font.family: Config.fontFamily
-                    font.pixelSize: 16
+                    font.pixelSize: Math.round(16 * Config.uiScale)
                     font.weight: 500
                 }
 

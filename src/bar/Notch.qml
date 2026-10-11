@@ -211,22 +211,20 @@ PanelWindow {
     readonly property bool mediaPlaying: !!(mediaPlayer && mediaPlayer.isPlaying)
     readonly property bool mediaPaused: !!(mediaPlayer
         && mediaPlayer.playbackState === MprisPlaybackState.Paused)
-    readonly property string mediaIconName: {
+    readonly property string mediaArtworkUrl: {
         if (!mediaPlayer)
-            return "audio-x-generic";
-        const id = String(mediaPlayer.desktopEntry || "");
-        const entry = id ? DesktopEntries.byId(id) : null;
-        if (entry && entry.icon)
-            return entry.icon;
-        const name = id.toLowerCase();
-        const entries = DesktopEntries.applications.values || [];
-        for (let i = 0; i < entries.length; i++) {
-            const candidate = entries[i];
-            if (candidate && String(candidate.id).toLowerCase()
-                    .replace(/\.desktop$/, "").endsWith("." + name))
-                return candidate.icon || id;
+            return "";
+        if (mediaPlayer.trackArtUrl)
+            return mediaPlayer.trackArtUrl;
+        // Firefox sometimes omits mpris:artUrl for YouTube videos.
+        const metadata = mediaPlayer.metadata || {};
+        const url = String(metadata["xesam:url"] || "");
+        if (/^https:\/\/(?:www\.|music\.)?youtube\.com\/watch\?/.test(url)) {
+            const match = url.match(/[?&]v=([\w-]{11})/);
+            if (match)
+                return "https://i.ytimg.com/vi/" + match[1] + "/mqdefault.jpg";
         }
-        return id || "audio-x-generic";
+        return "";
     }
     readonly property int mediaWidth: 216
     readonly property var mediaBarSteps: [
@@ -285,8 +283,8 @@ PanelWindow {
             return "Blocked";
         return bluetoothAdapter.enabled ? "On" : "Off";
     }
-    readonly property int menuWidth: launcherMode === "wallpapers"
-        ? 760 : (launcherMode === "control" ? 620 : 420)
+    readonly property int menuWidth: Math.round((launcherMode === "wallpapers"
+        ? 760 : (launcherMode === "control" ? 620 : 420)) * Config.uiScale)
     readonly property bool actionSearch: notch.searchQuery.startsWith(">")
     readonly property var launcherEntries: {
         const query = notch.searchQuery.trim().toLowerCase();
@@ -317,7 +315,7 @@ PanelWindow {
             apps.push(action);
         return apps.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     }
-    readonly property int osdHeight: 32
+    readonly property int osdHeight: Math.round(32 * Config.uiScale)
     readonly property int pillContentInset: 12
     readonly property int pillShoulderSize: 12
     readonly property int menuCornerRadius: launcherMode === "control" ? 44
@@ -326,13 +324,13 @@ PanelWindow {
     Behavior on animatedMenuRadius {
         NumberAnimation { duration: Config.standardAnimation; easing.type: Easing.OutCubic }
     }
-    readonly property int controlInset: 22
+    readonly property int controlInset: Math.round(22 * Config.uiScale)
     readonly property real controlTileRadius: animatedMenuRadius - controlInset
-    readonly property int menuHeight: launcherMode === "wallpapers"
+    readonly property int menuHeight: Math.round((launcherMode === "wallpapers"
         ? 280
         : (launcherMode === "control" ? 250
             : Math.max(94, Math.min(360,
-                58 + Math.max(1, launcherEntries.length) * 36)))
+                58 + Math.max(1, launcherEntries.length) * 36))) ) * Config.uiScale)
     property string osdMode: ""
     property bool displaying: false
     property bool osdClosing: false
@@ -799,7 +797,7 @@ PanelWindow {
                 clip: true
                 focus: launcher.active
                 font.family: Config.fontFamily
-                font.pixelSize: 15
+                font.pixelSize: Math.round(15 * Config.uiScale)
                 verticalAlignment: Text.AlignVCenter
                 onTextChanged: {
                     notch.searchQuery = text;
@@ -914,7 +912,7 @@ PanelWindow {
                             color: "#f4f5f7"
                             elide: Text.ElideRight
                             font.family: Config.fontFamily
-                            font.pixelSize: 15
+                            font.pixelSize: Math.round(15 * Config.uiScale)
                         }
 
                         Text {
@@ -922,8 +920,8 @@ PanelWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             text: ">"
                             color: "#777e8b"
-                            font.family: "Google Sans Flex"
-                            font.pixelSize: 14
+                            font.family: Config.fontFamily
+                            font.pixelSize: Math.round(14 * Config.uiScale)
                         }
                     }
 
@@ -1022,7 +1020,8 @@ PanelWindow {
                             color: "#4d7dff"
                             leftPadding: 5
                             bottomPadding: 5
-                            font.pixelSize: 13
+                            font.family: Config.fontFamily
+                            font.pixelSize: Math.round(13 * Config.uiScale)
                             font.weight: 550
                         }
 
@@ -1035,7 +1034,8 @@ PanelWindow {
                                     width: 24
                                     text: modelData
                                     color: "#c8ccd2"
-                                    font.pixelSize: 13
+                                    font.family: Config.fontFamily
+                                    font.pixelSize: Math.round(13 * Config.uiScale)
                                     horizontalAlignment: Text.AlignHCenter
                                 }
                             }
@@ -1056,9 +1056,10 @@ PanelWindow {
                                     text: visible ? day : ""
                                     color: day === Time.day ? "#111214" : "#8e939d"
                                     font.weight: Font.Normal
+                                    font.family: Config.fontFamily
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
-                                    font.pixelSize: 13
+                                    font.pixelSize: Math.round(13 * Config.uiScale)
                                     Rectangle {
                                         visible: day === Time.day
                                         anchors.centerIn: parent
@@ -1119,8 +1120,8 @@ PanelWindow {
                                 }
                                 Column {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    Text { text: "Wi-Fi"; color: "white"; font.pixelSize: controlGrid.titleSize }
-                                    Text { text: notch.wifiStatus; color: "#d8f1ff"; font.pixelSize: controlGrid.subtitleSize }
+                                    Text { text: "Wi-Fi"; color: "white"; font.family: Config.fontFamily; font.pixelSize: Math.round(controlGrid.titleSize * Config.uiScale) }
+                                    Text { text: notch.wifiStatus; color: "#d8f1ff"; font.family: Config.fontFamily; font.pixelSize: Math.round(controlGrid.subtitleSize * Config.uiScale) }
                                 }
                             }
 
@@ -1163,8 +1164,8 @@ PanelWindow {
                                 }
                                 Column {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    Text { text: "Bluetooth"; color: "white"; font.pixelSize: controlGrid.titleSize }
-                                    Text { text: notch.bluetoothStatus; color: "#d8f1ff"; font.pixelSize: controlGrid.subtitleSize }
+                                    Text { text: "Bluetooth"; color: "white"; font.family: Config.fontFamily; font.pixelSize: Math.round(controlGrid.titleSize * Config.uiScale) }
+                                    Text { text: notch.bluetoothStatus; color: "#d8f1ff"; font.family: Config.fontFamily; font.pixelSize: Math.round(controlGrid.subtitleSize * Config.uiScale) }
                                 }
                             }
 
@@ -1194,7 +1195,8 @@ PanelWindow {
                                 text: notch.mediaTitle
                                 color: "white"
                                 elide: Text.ElideRight
-                                font.pixelSize: controlGrid.titleSize
+                                font.family: Config.fontFamily
+                                font.pixelSize: Math.round(controlGrid.titleSize * Config.uiScale)
                                 font.weight: 600
                             }
                             Row {
@@ -1249,7 +1251,8 @@ PanelWindow {
                                 anchors.centerIn: parent
                                 text: "Do not disturb"
                                 color: "white"
-                                font.pixelSize: controlGrid.subtitleSize
+                                font.family: Config.fontFamily
+                                font.pixelSize: Math.round(controlGrid.subtitleSize * Config.uiScale)
                             }
                             MouseArea {
                                 anchors.fill: parent
@@ -1268,7 +1271,8 @@ PanelWindow {
                                 anchors.centerIn: parent
                                 text: "Search"
                                 color: "white"
-                                font.pixelSize: controlGrid.subtitleSize
+                                font.family: Config.fontFamily
+                                font.pixelSize: Math.round(controlGrid.subtitleSize * Config.uiScale)
                             }
                             MouseArea {
                                 anchors.fill: parent
@@ -1287,7 +1291,8 @@ PanelWindow {
                                 anchors.centerIn: parent
                                 text: Theme.dark ? "Light mode" : "Dark mode"
                                 color: "white"
-                                font.pixelSize: controlGrid.subtitleSize
+                                font.family: Config.fontFamily
+                                font.pixelSize: Math.round(controlGrid.subtitleSize * Config.uiScale)
                             }
                             MouseArea {
                                 anchors.fill: parent
@@ -1307,7 +1312,8 @@ PanelWindow {
                                 anchors.centerIn: parent
                                 text: notch.fakeTimerActive ? "Timer on" : "Timer"
                                 color: "white"
-                                font.pixelSize: controlGrid.subtitleSize
+                                font.family: Config.fontFamily
+                                font.pixelSize: Math.round(controlGrid.subtitleSize * Config.uiScale)
                             }
                             MouseArea {
                                 anchors.fill: parent
@@ -1363,7 +1369,7 @@ PanelWindow {
                 text: "Wallpapers"
                 color: "#8e939d"
                 font.family: Config.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: Math.round(13 * Config.uiScale)
                 font.weight: 600
             }
 
@@ -1450,7 +1456,8 @@ PanelWindow {
                     ? (notch.wallpaperIndex + 1) + " / " + notch.wallpapers.length
                     : "No wallpapers found"
                 color: "#8e939d"
-                font.pixelSize: 12
+                font.family: Config.fontFamily
+                font.pixelSize: Math.round(12 * Config.uiScale)
             }
         }
 
@@ -1477,14 +1484,28 @@ PanelWindow {
                 anchors.fill: parent
                 spacing: 8
 
-                Image {
+                Item {
                     Layout.preferredWidth: 16
                     Layout.preferredHeight: 16
-                    source: Quickshell.iconPath(notch.mediaIconName, true)
-                    sourceSize: Qt.size(16, 16)
-                    fillMode: Image.PreserveAspectFit
-                    asynchronous: true
-                    smooth: true
+
+                    Image {
+                        anchors.fill: parent
+                        source: Icon.getPath("media/playlist")
+                        sourceSize: Qt.size(16, 16)
+                        visible: artwork.status !== Image.Ready
+                        opacity: 0.7
+                    }
+
+                    Image {
+                        id: artwork
+                        anchors.fill: parent
+                        source: notch.mediaArtworkUrl
+                        sourceSize: Qt.size(64, 64)
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        smooth: true
+                        visible: status === Image.Ready
+                    }
                 }
 
                 Text {
@@ -1493,7 +1514,7 @@ PanelWindow {
                     elide: Text.ElideRight
                     color: "#f4f5f7"
                     font.family: Config.fontFamily
-                    font.pixelSize: 13
+                    font.pixelSize: Math.round(13 * Config.uiScale)
                     font.weight: Font.Medium
                     verticalAlignment: Text.AlignVCenter
                     opacity: mediaHover.hovered ? 1 : 0

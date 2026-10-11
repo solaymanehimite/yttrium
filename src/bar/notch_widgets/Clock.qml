@@ -11,7 +11,7 @@ RowLayout {
         id: clockWidth
         text: "00:00"
         font.family: Config.fontFamily
-        font.pixelSize: 14
+        font.pixelSize: Math.round(14 * Config.uiScale)
         font.weight: Font.Medium
         font.features: { "tnum": 1 }
     }
@@ -24,7 +24,7 @@ RowLayout {
         text: Time.time
         color: Theme.barText
         font.family: Config.fontFamily
-        font.pixelSize: 14
+        font.pixelSize: Math.round(14 * Config.uiScale)
         font.weight: Font.Medium
         font.features: { "tnum": 1 }
     }
@@ -34,7 +34,7 @@ RowLayout {
         text: Time.date
         color: Theme.barText
         font.family: Config.fontFamily
-        font.pixelSize: 14
+        font.pixelSize: Math.round(14 * Config.uiScale)
         font.weight: Font.Medium
     }
 }

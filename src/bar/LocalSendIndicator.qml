@@ -23,7 +23,7 @@ Item {
     readonly property int pendingCount: pendingFiles.length + pendingTexts.length
 
     implicitWidth: 26
-    implicitHeight: 26
+    implicitHeight: Math.round(26 * Config.uiScale)
     Layout.preferredWidth: implicitWidth
     Layout.preferredHeight: implicitHeight
     Layout.alignment: Qt.AlignVCenter
@@ -236,8 +236,8 @@ Item {
 
     Rectangle {
         anchors.centerIn: parent
-        width: 26
-        height: 26
+        width: Math.round(26 * Config.uiScale)
+        height: Math.round(26 * Config.uiScale)
         radius: 8
         color: indicator.menuOpen
             ? Theme.indicatorActive
@@ -248,8 +248,8 @@ Item {
     Image {
         id: icon
         anchors.centerIn: parent
-        width: 16
-        height: 16
+        width: Math.round(16 * Config.uiScale)
+        height: Math.round(16 * Config.uiScale)
         source: Icon.getPath("localsend" + Theme.topBarIconSuffix)
         sourceSize: Qt.size(16, 16)
         fillMode: Image.PreserveAspectFit
@@ -270,8 +270,8 @@ Item {
             rightMargin: -4
         }
         width: Math.max(14, badgeText.implicitWidth + 8)
-        height: 14
-        radius: 7
+        height: Math.round(14 * Config.uiScale)
+        radius: Math.round(7 * Config.uiScale)
         color: "#4d7dff"
 
         Text {
@@ -279,7 +279,8 @@ Item {
             anchors.centerIn: parent
             text: indicator.pendingCount
             color: "white"
-            font.pixelSize: 9
+            font.family: Config.fontFamily
+            font.pixelSize: Math.round(9 * Config.uiScale)
             font.weight: 700
         }
     }

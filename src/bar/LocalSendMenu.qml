@@ -11,8 +11,8 @@ PanelWindow {
     required property var hostWindow
     required property var anchorItem
 
-    readonly property int menuWidth: 280
-    readonly property int rowHeight: 36
+    readonly property int menuWidth: Math.round(280 * Config.uiScale)
+    readonly property int rowHeight: Math.round(36 * Config.uiScale)
     property real menuX: 8
 
     screen: hostWindow ? hostWindow.screen : null
@@ -69,7 +69,7 @@ PanelWindow {
         x: menu.anchorX()
         y: 0
         width: anchorItem ? anchorItem.width : 0
-        height: 30
+        height: Math.round(30 * Config.uiScale)
         enabled: controller.running
         onEntered: controller.draggingOver = true
         onExited: controller.draggingOver = false
@@ -132,7 +132,8 @@ PanelWindow {
                             + (controller.pendingCount === 1 ? "" : "s")
                         : "LocalSend"
                     color: Theme.menuText
-                    font.pixelSize: 15
+                    font.family: Config.fontFamily
+                    font.pixelSize: Math.round(15 * Config.uiScale)
                     font.weight: 600
                 }
 
@@ -144,7 +145,8 @@ PanelWindow {
                     }
                     text: controller.sending ? "Sending…" : "Devices"
                     color: Theme.menuText
-                    font.pixelSize: 12
+                    font.family: Config.fontFamily
+                    font.pixelSize: Math.round(12 * Config.uiScale)
                 }
             }
 
@@ -157,7 +159,8 @@ PanelWindow {
                     anchors.centerIn: parent
                     text: "Drop files or text here"
                     color: Theme.menuText
-                    font.pixelSize: 13
+                    font.family: Config.fontFamily
+                    font.pixelSize: Math.round(13 * Config.uiScale)
                 }
             }
 
@@ -173,7 +176,8 @@ PanelWindow {
                         ? "Looking for devices…"
                         : (controller.error || "No devices found")
                     color: controller.error ? "#c43d4b" : Theme.menuMutedText
-                    font.pixelSize: 13
+                    font.family: Config.fontFamily
+                    font.pixelSize: Math.round(13 * Config.uiScale)
                 }
             }
 
@@ -202,7 +206,8 @@ PanelWindow {
                         text: String(modelData.alias || "Unknown device")
                         color: Theme.menuText
                         elide: Text.ElideRight
-                        font.pixelSize: 14
+                        font.family: Config.fontFamily
+                        font.pixelSize: Math.round(14 * Config.uiScale)
                     }
 
                     MouseArea {
@@ -235,7 +240,8 @@ PanelWindow {
                     }
                     text: "Clear tray"
                     color: Theme.menuText
-                    font.pixelSize: 13
+                    font.family: Config.fontFamily
+                    font.pixelSize: Math.round(13 * Config.uiScale)
                 }
 
                 MouseArea {

@@ -16,14 +16,14 @@ PanelWindow {
         right: true
     }
 
-    // Match layout.gaps in ~/.config/niri/config.kdl. The extra exclusive
-    // space leaves the same gap between the bar and the first window below.
+    // Keep the bar spacing balanced with the side margins. Niri adds the
+    // configured layout gap between the reserved bar space and first window.
     margins {
         top: bar.niriGap
         left: bar.niriGap
         right: bar.niriGap
     }
-    exclusiveZone: implicitHeight + bar.niriGap
+    exclusiveZone: implicitHeight
 
     implicitHeight: Config.barHeight
     color: "transparent"

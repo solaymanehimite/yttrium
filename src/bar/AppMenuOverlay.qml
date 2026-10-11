@@ -26,7 +26,7 @@ PanelWindow {
         return false;
     }
     readonly property bool canGoBack: menuStack.length > 1
-    readonly property int menuWidth: 268
+    readonly property int menuWidth: Math.round(268 * Config.uiScale)
 
     signal itemActivated(var item)
 
@@ -181,7 +181,7 @@ PanelWindow {
                     id: backRow
                     visible: root.canGoBack
                     width: parent.width
-                    height: visible ? 32 : 0
+                    height: visible ? Math.round(32 * Config.uiScale) : 0
 
                     Rectangle {
                         anchors.fill: parent
@@ -232,7 +232,7 @@ PanelWindow {
                         color: Theme.menuText
                         elide: Text.ElideRight
                         font.family: Config.fontFamily
-                        font.pixelSize: 15
+                        font.pixelSize: Math.round(15 * Config.uiScale)
                         font.weight: 600
                     }
 

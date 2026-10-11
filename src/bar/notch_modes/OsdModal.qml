@@ -67,7 +67,7 @@ RowLayout {
         color: "#ffffff"
         Layout.alignment: Qt.AlignVCenter
         font.family: Config.fontFamily
-        font.pixelSize: 14
+        font.pixelSize: Math.round(14 * Config.uiScale)
         font.weight: 600
     }
 

@@ -1,4 +1,5 @@
 import QtQuick
+import qs.src.services
 
 Item {
     id: root
@@ -21,8 +22,8 @@ Item {
     Rectangle {
         x: 0
         y: 10
-        width: 38
-        height: 38
+        width: Math.round(38 * Config.uiScale)
+        height: Math.round(38 * Config.uiScale)
         radius: 0
         color: "transparent"
 
@@ -39,23 +40,23 @@ Item {
     }
 
     Column {
-        x: 50
-        y: 9
+        x: Math.round(50 * Config.uiScale)
+        y: Math.round(9 * Config.uiScale)
         spacing: 0
 
         Text {
             text: root.title
             color: "#f6f8fb"
-            font.family: "Google Sans Flex"
-            font.pixelSize: 15
+            font.family: Config.fontFamily
+            font.pixelSize: Math.round(15 * Config.uiScale)
             font.weight: 600
         }
 
         Text {
             text: root.detail
             color: "#9da5b2"
-            font.family: "Google Sans Flex"
-            font.pixelSize: 12
+            font.family: Config.fontFamily
+            font.pixelSize: Math.round(12 * Config.uiScale)
             font.weight: 500
         }
     }
@@ -66,8 +67,8 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         text: root.value
         color: root.accentColor
-        font.family: "Google Sans Flex"
-        font.pixelSize: root.value === "Muted" ? 16 : 25
+        font.family: Config.fontFamily
+        font.pixelSize: Math.round((root.value === "Muted" ? 16 : 25) * Config.uiScale)
         font.weight: 650
         font.features: { "tnum": 1 }
     }

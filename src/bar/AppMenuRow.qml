@@ -22,7 +22,7 @@ Item {
 
     visible: !modelData || modelData.visible !== false
     width: parent ? parent.width : 0
-    height: isSeparator ? 8 : 32
+    height: isSeparator ? Math.round(8 * Config.uiScale) : Math.round(32 * Config.uiScale)
 
     Accessible.role: isSeparator ? Accessible.Separator : Accessible.MenuItem
     Accessible.name: isSeparator ? "" : String(modelData.label || "").replace(/_/g, "")
@@ -133,7 +133,7 @@ Item {
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
                 font.family: Config.fontFamily
-                font.pixelSize: 15
+                font.pixelSize: Math.round(15 * Config.uiScale)
                 font.weight: 500
             }
 
