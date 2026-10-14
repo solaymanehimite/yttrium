@@ -10,7 +10,10 @@ RowLayout {
     id: indicators
 
     signal controlCenterClicked()
+    signal notificationsClicked()
     required property var barWindow
+    readonly property bool hasNotifications: notchWindow && notchWindow.notificationCount > 0
+    property var notchWindow
 
     anchors.right: parent.right
     anchors.rightMargin: 16
@@ -18,7 +21,7 @@ RowLayout {
     height: parent.height
     spacing: 16
 
-    // Left-to-right order: LocalSend, volume, Wi-Fi, battery, then the clock/date.
+    // Left-to-right order: LocalSend, volume, Wi-Fi, battery, bell, then the clock/date.
     LocalSendIndicator {
         hostWindow: indicators.barWindow
     }
@@ -54,6 +57,8 @@ RowLayout {
 
             Network {
                 rasterScale: 1.0
+                // The control-center icon stays white; the menu-bar icon follows the theme.
+                darkIcon: !Theme.dark
             }
 
             Battery {
@@ -68,6 +73,39 @@ RowLayout {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: indicators.controlCenterClicked()
+        }
+    }
+
+    Item {
+        Layout.preferredWidth: 38
+        Layout.preferredHeight: 26
+        visible: indicators.hasNotifications
+
+        RowLayout {
+            anchors.centerIn: parent
+            spacing: 4
+
+            Image {
+                Layout.preferredWidth: 16
+                Layout.preferredHeight: 16
+                source: Icon.getPath("bell" + Theme.topBarIconSuffix)
+                sourceSize: Qt.size(16, 16)
+            }
+
+            Text {
+                text: indicators.notchWindow.notificationCount > 99
+                    ? "99+" : String(indicators.notchWindow.notificationCount)
+                color: Theme.barText
+                font.family: Config.fontFamily
+                font.pixelSize: 11
+                font.weight: 600
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: indicators.notificationsClicked()
         }
     }
 

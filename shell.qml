@@ -33,7 +33,9 @@ PanelWindow {
     }
     RightIndicators {
         barWindow: bar
+        notchWindow: notch
         onControlCenterClicked: notch.openControlCenter()
+        onNotificationsClicked: notch.openNotifications()
     }
     Notch {
         id: notch

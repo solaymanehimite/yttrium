@@ -3,6 +3,7 @@ import Quickshell.Io
 import Quickshell.Bluetooth
 import Quickshell.Networking
 import Quickshell.Services.Mpris
+import Quickshell.Services.Notifications
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Shapes
@@ -16,6 +17,17 @@ import qs.src.services
 // One top-surface with two states: a transient OSD and an expandable menu.
 PanelWindow {
     id: notch
+
+    // Quickshell owns the freedesktop notification service, so applications
+    // have a real notification endpoint even when no desktop daemon is set up.
+    NotificationServer {
+        id: notificationServer
+        keepOnReload: true
+        bodySupported: true
+        bodyMarkupSupported: false
+        actionsSupported: true
+        imageSupported: true
+    }
 
     component ControlGridCell: Rectangle {
         required property var grid
@@ -55,10 +67,11 @@ PanelWindow {
         readonly property real cornerSize: Math.min(animatedSize, Math.max(0, notchSurface.height))
 
         Behavior on animatedSize {
-            NumberAnimation {
-                duration: notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
-                    ? 145 : Config.standardAnimation
-                easing.type: Easing.OutCubic
+            SpringAnimation {
+                spring: 9
+                damping: 0.75
+                mass: 1.6
+                epsilon: 0.01
             }
         }
 
@@ -111,15 +124,48 @@ PanelWindow {
         visible: active || opacity > 0
         opacity: active ? 1 : 0
         Behavior on opacity {
-            NumberAnimation { duration: Config.modeCrossfade; easing.type: Easing.OutCubic }
+            SpringAnimation {
+                spring: 11
+                damping: 0.75
+                mass: 1.6
+                epsilon: 0.01
+            }
         }
 
         OsdModal {
             anchors.fill: parent
+            visible: mode !== "notification"
             iconSource: mode === "brightness" ? Icon.getPath("sun") : notch.volumeIcon
             title: mode === "brightness" ? "Brightness" : (Audio.muted ? "Muted" : "Volume")
             value: mode === "brightness" ? notch.brightnessFrac : notch.volumeFrac
             muted: mode === "volume" && Audio.muted
+        }
+
+        RowLayout {
+            anchors.fill: parent
+            visible: mode === "notification"
+            spacing: 8
+
+            Image {
+                Layout.preferredWidth: 16
+                Layout.preferredHeight: 16
+                source: notch.notificationIcon
+                sourceSize: Qt.size(16, 16)
+                fillMode: Image.PreserveAspectFit
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 0
+                Text {
+                    Layout.fillWidth: true
+                    text: notch.notificationTitle
+                    color: "#ffffff"
+                    elide: Text.ElideRight
+                    font.family: Config.fontFamily
+                    font.pixelSize: Math.round(13 * Config.uiScale)
+                    font.weight: 600
+                }
+            }
         }
     }
 
@@ -134,7 +180,12 @@ PanelWindow {
         opacity: enabled ? (active || controlHover.hovered ? 1 : 0.72) : 0.28
 
         Behavior on opacity {
-            NumberAnimation { duration: Config.shortAnimation }
+            SpringAnimation {
+                spring: 11
+                damping: 0.75
+                mass: 1.6
+                epsilon: 0.01
+            }
         }
 
         Image {
@@ -185,6 +236,17 @@ PanelWindow {
 
     property string searchQuery: ""
     property string launcherMode: "apps"
+    property var notifications: []
+    property var currentNotification: null
+    readonly property int notificationCount: notifications.length
+    readonly property string notificationTitle: currentNotification
+        ? String(currentNotification.summary || currentNotification.appName || "Notification")
+        : "Notification"
+    readonly property string notificationBody: currentNotification
+        ? String(currentNotification.body || "")
+        : ""
+    readonly property string notificationIcon: currentNotification && currentNotification.image
+        ? currentNotification.image : Icon.getPath("bell")
     property int selectedIndex: 0
     property int wallpaperIndex: 0
     property bool modeTransitioning: false
@@ -282,7 +344,7 @@ PanelWindow {
         return bluetoothAdapter.enabled ? "On" : "Off";
     }
     readonly property int menuWidth: Math.round((launcherMode === "wallpapers"
-        ? 640 : (launcherMode === "control" ? 560 : 420)) * Config.uiScale)
+        ? 640 : ((launcherMode === "control" || launcherMode === "notifications") ? 560 : 420)) * Config.uiScale)
     readonly property bool actionSearch: notch.searchQuery.startsWith(">")
     readonly property var launcherEntries: {
         const query = notch.searchQuery.trim().toLowerCase();
@@ -316,19 +378,24 @@ PanelWindow {
     readonly property int osdHeight: Math.round(32 * Config.uiScale)
     readonly property int pillContentInset: 12
     readonly property int pillShoulderSize: 12
-    readonly property int menuCornerRadius: launcherMode === "control" ? 44
+    readonly property int menuCornerRadius: (launcherMode === "control" || launcherMode === "notifications") ? 44
         : (launcherMode === "wallpapers" ? 34 : 24)
     property real animatedMenuRadius: menuCornerRadius
     Behavior on animatedMenuRadius {
-        NumberAnimation { duration: Config.standardAnimation; easing.type: Easing.OutCubic }
+        SpringAnimation {
+            spring: 9
+            damping: 0.75
+            mass: 1.6
+            epsilon: 0.01
+        }
     }
     readonly property int controlInset: Math.round(22 * Config.uiScale)
     readonly property real controlTileRadius: animatedMenuRadius - controlInset
     readonly property int menuHeight: Math.round((launcherMode === "wallpapers"
         ? 250
-        : (launcherMode === "control" ? 230
-            : Math.max(94, Math.min(360,
-                58 + Math.max(1, launcherEntries.length) * 36))) ) * Config.uiScale)
+        : ((launcherMode === "control" || launcherMode === "notifications") ? 230
+            : Math.max(90, Math.min(360,
+                54 + Math.max(1, launcherEntries.length) * 36))) ) * Config.uiScale)
     property string osdMode: ""
     property bool displaying: false
     property bool osdClosing: false
@@ -352,6 +419,32 @@ PanelWindow {
     property bool fakeTimerActive: false
 
     Component.onCompleted: refreshWallpapers()
+
+    Connections {
+        target: notificationServer
+        function onNotification(notification) {
+            notification.tracked = true;
+            notch.notifications = [notification].concat(notch.notifications);
+            notch.showNotification(notification);
+            notification.closed.connect(function() {
+                notch.notifications = notch.notifications.filter(item => item.id !== notification.id);
+            });
+        }
+    }
+
+    function showNotification(notification) {
+        if (!notch.ready || notch.menuOpen || notch.menuOpening || notch.menuClosing)
+            return;
+        notch.currentNotification = notification;
+        notch.osdMode = "notification";
+        notch.displaying = true;
+        notch.osdClosing = false;
+        exitTimer.stop();
+        hideTimer.restart();
+        scaleAnimation.stop();
+        verticalScale.yScale = 1;
+    }
+
 
     function toggleMenu() {
         scaleAnimation.stop();
@@ -461,6 +554,22 @@ PanelWindow {
         searchInput.text = ">";
         searchInput.forceActiveFocus();
         selectedIndex = 0;
+    }
+
+    function openNotifications() {
+        if (!menuOpen) {
+            hideTimer.stop();
+            exitTimer.stop();
+            osdMode = "";
+            displaying = false;
+            menuClosing = false;
+            menuOpening = true;
+            menuOpen = true;
+        }
+        modeTransitioning = true;
+        launcherMode = "notifications";
+        modeAnimationTimer.restart();
+        Qt.callLater(function() { notificationPanel.forceActiveFocus(); });
     }
 
     function openControlCenter() {
@@ -674,7 +783,6 @@ PanelWindow {
         notchSurface: surface
         scaleY: verticalScale.yScale
         targetSize: notch.menuOpen || notch.menuOpening
-            || (notch.menuClosing && !notch.mediaPlaying && !notch.mediaPaused)
             ? (notch.launcherMode === "apps" ? 24 : 30)
             : (notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
                 || notch.osdActive || notch.osdClosing ? notch.pillShoulderSize : 18)
@@ -685,7 +793,6 @@ PanelWindow {
         rightSide: true
         scaleY: verticalScale.yScale
         targetSize: notch.menuOpen || notch.menuOpening
-            || (notch.menuClosing && !notch.mediaPlaying && !notch.mediaPaused)
             ? (notch.launcherMode === "apps" ? 24 : 30)
             : (notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
                 || notch.osdActive || notch.osdClosing ? notch.pillShoulderSize : 18)
@@ -696,18 +803,19 @@ PanelWindow {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         width: notch.menuOpen || notch.menuOpening
-            || (notch.menuClosing && !notch.mediaPlaying && !notch.mediaPaused)
             ? notch.menuWidth
             : (notch.osdActive && !notch.osdClosing
                 ? 300 : (notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
                     ? notch.mediaWidth : 300))
+        // Keep every state change springing. Previously this behavior was
+        // disabled as closing flags cleared, so the width binding jumped to
+        // its idle value at the end of the collapse.
         Behavior on width {
-            enabled: notch.morphingFromOsd || notch.modeTransitioning
-                || notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
-            NumberAnimation {
-                duration: notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
-                    ? 145 : Config.standardAnimation
-                easing.type: Easing.OutCubic
+            SpringAnimation {
+                spring: 9
+                damping: 0.75
+                mass: 1.6
+                epsilon: 0.01
             }
         }
         height: notch.menuOpen || notch.menuOpening
@@ -745,19 +853,22 @@ PanelWindow {
             yScale: 0.82
         }
 
-        NumberAnimation {
+        SpringAnimation {
             id: scaleAnimation
             target: verticalScale
             property: "yScale"
-            duration: 180
-            easing.type: Easing.OutCubic
+            spring: 11
+            damping: 0.68
+            mass: 1.6
+            epsilon: 0.01
         }
 
         Behavior on height {
-            NumberAnimation {
-                duration: notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
-                    ? 145 : Config.standardAnimation
-                easing.type: Easing.OutCubic
+            SpringAnimation {
+                spring: 9
+                damping: 0.75
+                mass: 1.6
+                epsilon: 0.01
             }
         }
 
@@ -767,10 +878,21 @@ PanelWindow {
             visible: active || opacity > 0
             enabled: active
             opacity: active ? 1 : 0
+            scale: active ? 1 : 0.7
             Behavior on opacity {
-                NumberAnimation {
-                    duration: Config.modeCrossfade
-                    easing.type: Easing.OutCubic
+                SpringAnimation {
+                    spring: 11
+                    damping: 0.75
+                    mass: 1.6
+                    epsilon: 0.01
+                }
+            }
+            Behavior on scale {
+                SpringAnimation {
+                    spring: 14
+                    damping: 0.72
+                    mass: 1.4
+                    epsilon: 0.01
                 }
             }
             anchors {
@@ -986,13 +1108,29 @@ PanelWindow {
             readonly property int calendarDays: new Date(Time.year, Time.month + 1, 0).getDate()
             anchors.fill: parent
             anchors.margins: 10
-            readonly property bool active: notch.menuOpen && notch.launcherMode === "control"
+            clip: true
+            readonly property bool active: notch.menuOpen
+                && (notch.launcherMode === "control" || notch.launcherMode === "notifications")
             visible: active || opacity > 0
             enabled: active
             focus: active
             opacity: active ? 1 : 0
+            scale: active ? 1 : 0.7
             Behavior on opacity {
-                NumberAnimation { duration: Config.modeCrossfade; easing.type: Easing.OutCubic }
+                SpringAnimation {
+                    spring: 11
+                    damping: 0.75
+                    mass: 1.6
+                    epsilon: 0.01
+                }
+            }
+            Behavior on scale {
+                SpringAnimation {
+                    spring: 14
+                    damping: 0.72
+                    mass: 1.4
+                    epsilon: 0.01
+                }
             }
 
             Keys.onEscapePressed: notch.closeControlCenter()
@@ -1075,6 +1213,23 @@ PanelWindow {
 
                     Item {
                         id: controlGrid
+                        visible: (notch.menuOpen || notch.menuClosing)
+                            && (notch.launcherMode === "control"
+                                || notch.launcherMode === "notifications")
+                        opacity: notch.menuOpen && notch.launcherMode === "control" ? 1 : 0
+                        scale: notch.launcherMode === "control" ? 1 : 0.92
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 260
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 260
+                                easing.type: Easing.OutCubic
+                            }
+                        }
                         readonly property real gap: 8
                         readonly property int columns: 4
                         readonly property int rows: 3
@@ -1100,6 +1255,13 @@ PanelWindow {
                             x: 24 + (controlGrid.width
                                 - (controlGrid.columns * controlGrid.cellWidth
                                     + (controlGrid.columns - 1) * controlGrid.gap)) / 2
+                            y: notch.launcherMode === "notifications" ? -controlGrid.height : 0
+                            Behavior on y {
+                                NumberAnimation {
+                                    duration: 260
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
                         }
 
                         ControlGridCell {
@@ -1121,7 +1283,8 @@ PanelWindow {
                                 anchors.rightMargin: controlGrid.wideTileSidePadding
                                 spacing: controlGrid.wideTileIconGap
                                 NotchWidgets.Network {
-                                    darkIcon: Networking.wifiEnabled
+                                    // Control-center icons use the dark variant.
+                                    darkIcon: true
                                     width: 18
                                     height: 18
                                     anchors.verticalCenter: parent.verticalCenter
@@ -1263,19 +1426,20 @@ PanelWindow {
                             gridColumn: 1
                             gridRow: 2
                             radius: width / 2
-                            baseColor: controlGrid.passiveTileColor
-                            hoverColor: controlGrid.hoverTileColor
+                            baseColor: notch.fakeTimerActive
+                                ? controlGrid.activeTileColor : controlGrid.passiveTileColor
+                            hoverColor: notch.fakeTimerActive ? "#d8dde3" : controlGrid.hoverTileColor
                             Image {
                                 anchors.centerIn: parent
                                 width: Math.round(16 * Config.uiScale)
                                 height: Math.round(16 * Config.uiScale)
-                                source: Icon.getPath("search_white")
+                                source: Icon.getPath(notch.fakeTimerActive ? "timer_dark" : "timer_light")
                                 sourceSize: Qt.size(width, height)
                                 fillMode: Image.PreserveAspectFit
                             }
                             MouseArea {
                                 anchors.fill: parent
-                                onClicked: notch.openAppSearch()
+                                onClicked: notch.fakeTimerActive = !notch.fakeTimerActive
                             }
                         }
 
@@ -1305,23 +1469,102 @@ PanelWindow {
                             gridColumn: 3
                             gridRow: 2
                             radius: width / 2
-                            baseColor: notch.fakeTimerActive
-                                ? controlGrid.activeTileColor : controlGrid.passiveTileColor
-                            hoverColor: notch.fakeTimerActive ? "#d8dde3" : controlGrid.hoverTileColor
+                            baseColor: notch.notificationCount > 0 ? "#f6f8fb" : controlGrid.passiveTileColor
+                            hoverColor: notch.notificationCount > 0 ? "#d8dde3" : controlGrid.hoverTileColor
                             Image {
                                 anchors.centerIn: parent
                                 width: Math.round(16 * Config.uiScale)
                                 height: Math.round(16 * Config.uiScale)
-                                source: Icon.getPath(notch.fakeTimerActive ? "timer_dark" : "timer_light")
+                                source: Icon.getPath(notch.notificationCount > 0 ? "bell_black" : "bell")
                                 sourceSize: Qt.size(width, height)
-                                fillMode: Image.PreserveAspectFit
                             }
                             MouseArea {
                                 anchors.fill: parent
-                                onClicked: notch.fakeTimerActive = !notch.fakeTimerActive
+                                onClicked: notch.openNotifications()
                             }
                         }
+
                     }
+                }
+            }
+        }
+
+        Item {
+            id: notificationPanel
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: 280
+            anchors.rightMargin: 18
+            anchors.topMargin: 18
+            anchors.bottomMargin: 18
+            height: Math.max(0, parent.height - anchors.topMargin - anchors.bottomMargin)
+            readonly property bool active: notch.menuOpen && notch.launcherMode === "notifications"
+            visible: (notch.menuOpen || notch.menuClosing)
+                && (notch.launcherMode === "control"
+                    || notch.launcherMode === "notifications")
+            enabled: active
+            focus: active
+            opacity: active ? 1 : 0
+            y: active ? anchors.topMargin : parent.height - anchors.topMargin
+            scale: active ? 1 : 0.92
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 260
+                    easing.type: Easing.OutCubic
+                }
+            }
+            Behavior on y {
+                NumberAnimation {
+                    duration: 260
+                    easing.type: Easing.OutCubic
+                }
+            }
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 260
+                    easing.type: Easing.OutCubic
+                }
+            }
+            Keys.onEscapePressed: notch.openControlCenter()
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 8
+                Text {
+                    Layout.fillWidth: true
+                    text: "Notifications"
+                    color: "#4d7dff"
+                    font.family: Config.fontFamily
+                    font.pixelSize: Math.round(13 * Config.uiScale)
+                    font.weight: 600
+                }
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 6
+                    model: notch.notifications
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: ListView.view.width
+                        height: 52
+                        radius: 16
+                        color: "#191c21"
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 8
+                            Image { Layout.preferredWidth: 18; Layout.preferredHeight: 18; source: modelData.image || Icon.getPath("bell"); sourceSize: Qt.size(18, 18) }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 1
+                                Text { Layout.fillWidth: true; text: modelData.appName || modelData.summary || "Notification"; color: "#f4f5f7"; elide: Text.ElideRight; font.family: Config.fontFamily; font.pixelSize: Math.round(12 * Config.uiScale); font.weight: 600 }
+                                Text { Layout.fillWidth: true; text: modelData.body || modelData.summary || ""; color: "#9da4b0"; elide: Text.ElideRight; font.family: Config.fontFamily; font.pixelSize: Math.round(11 * Config.uiScale) }
+                            }
+                            MouseArea { anchors.fill: parent; onClicked: modelData.dismiss() }
+                        }
+                    }
+                    Text { anchors.centerIn: parent; visible: notch.notificationCount === 0; text: "You're all caught up"; color: "#777e8b"; font.family: Config.fontFamily; font.pixelSize: Math.round(13 * Config.uiScale) }
                 }
             }
         }
@@ -1335,8 +1578,22 @@ PanelWindow {
             enabled: active
             focus: active
             opacity: active ? 1 : 0
+            scale: active ? 1 : 0.7
             Behavior on opacity {
-                NumberAnimation { duration: Config.modeCrossfade; easing.type: Easing.OutCubic }
+                SpringAnimation {
+                    spring: 11
+                    damping: 0.75
+                    mass: 1.6
+                    epsilon: 0.01
+                }
+            }
+            Behavior on scale {
+                SpringAnimation {
+                    spring: 14
+                    damping: 0.72
+                    mass: 1.4
+                    epsilon: 0.01
+                }
             }
 
             function move(delta) {
@@ -1413,10 +1670,20 @@ PanelWindow {
                     scale: PathView.isCurrentItem ? 1.25 : 0.86
                     opacity: PathView.onPath ? (PathView.isCurrentItem ? 1 : 0.45) : 0
                     Behavior on scale {
-                        NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                        SpringAnimation {
+                            spring: 9
+                            damping: 0.62
+                            mass: 1.6
+                            epsilon: 0.01
+                        }
                     }
                     Behavior on opacity {
-                        NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
+                        SpringAnimation {
+                            spring: 11
+                            damping: 0.75
+                            mass: 1.6
+                            epsilon: 0.01
+                        }
                     }
 
                     Rectangle {
@@ -1478,7 +1745,12 @@ PanelWindow {
             enabled: active
             opacity: active ? 1 : 0
             Behavior on opacity {
-                NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                SpringAnimation {
+                    spring: 11
+                    damping: 0.75
+                    mass: 1.6
+                    epsilon: 0.01
+                }
             }
 
             RowLayout {
@@ -1520,7 +1792,12 @@ PanelWindow {
                     verticalAlignment: Text.AlignVCenter
                     opacity: mediaHover.hovered ? 1 : 0
                     Behavior on opacity {
-                        NumberAnimation { duration: Config.modeCrossfade; easing.type: Easing.OutCubic }
+                        SpringAnimation {
+                            spring: 11
+                            damping: 0.75
+                            mass: 1.6
+                            epsilon: 0.01
+                        }
                     }
                 }
 
@@ -1535,7 +1812,12 @@ PanelWindow {
                         visible: opacity > 0
                         opacity: notch.mediaPlaying && !mediaHover.hovered ? 1 : 0
                         Behavior on opacity {
-                            NumberAnimation { duration: Config.mediumAnimation }
+                            SpringAnimation {
+                                spring: 11
+                                damping: 0.75
+                                mass: 1.6
+                                epsilon: 0.01
+                            }
                         }
                         Repeater {
                             model: 5
@@ -1552,7 +1834,12 @@ PanelWindow {
                                 radius: 1
                                 color: "#f4f5f7"
                                 Behavior on height {
-                                    NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                                    SpringAnimation {
+                                        spring: 9
+                                        damping: 0.62
+                                        mass: 1.6
+                                        epsilon: 0.01
+                                    }
                                 }
                             }
                         }
@@ -1568,7 +1855,12 @@ PanelWindow {
                         visible: opacity > 0
                         opacity: notch.mediaPaused || (notch.mediaPlaying && mediaHover.hovered) ? 1 : 0
                         Behavior on opacity {
-                            NumberAnimation { duration: Config.mediumAnimation }
+                            SpringAnimation {
+                                spring: 11
+                                damping: 0.75
+                                mass: 1.6
+                                epsilon: 0.01
+                            }
                         }
                     }
                 }
@@ -1588,5 +1880,6 @@ PanelWindow {
 
         NotchOsd { mode: "volume" }
         NotchOsd { mode: "brightness" }
+        NotchOsd { mode: "notification" }
     }
 }
