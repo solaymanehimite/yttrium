@@ -416,7 +416,6 @@ PanelWindow {
     property bool ready: false
     property bool suppressExternalOsd: false
     property bool doNotDisturb: false
-    property bool fakeTimerActive: false
 
     Component.onCompleted: refreshWallpapers()
 
@@ -1426,28 +1425,6 @@ PanelWindow {
                             gridColumn: 1
                             gridRow: 2
                             radius: width / 2
-                            baseColor: notch.fakeTimerActive
-                                ? controlGrid.activeTileColor : controlGrid.passiveTileColor
-                            hoverColor: notch.fakeTimerActive ? "#d8dde3" : controlGrid.hoverTileColor
-                            Image {
-                                anchors.centerIn: parent
-                                width: Math.round(16 * Config.uiScale)
-                                height: Math.round(16 * Config.uiScale)
-                                source: Icon.getPath(notch.fakeTimerActive ? "timer_dark" : "timer_light")
-                                sourceSize: Qt.size(width, height)
-                                fillMode: Image.PreserveAspectFit
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: notch.fakeTimerActive = !notch.fakeTimerActive
-                            }
-                        }
-
-                        ControlGridCell {
-                            grid: controlGrid
-                            gridColumn: 2
-                            gridRow: 2
-                            radius: width / 2
                             baseColor: Theme.dark ? "#f6f8fb" : "transparent"
                             hoverColor: Theme.dark ? "#d8dde3" : controlGrid.hoverTileColor
                             Image {
@@ -1466,7 +1443,7 @@ PanelWindow {
 
                         ControlGridCell {
                             grid: controlGrid
-                            gridColumn: 3
+                            gridColumn: 2
                             gridRow: 2
                             radius: width / 2
                             baseColor: notch.notificationCount > 0 ? "#f6f8fb" : controlGrid.passiveTileColor
