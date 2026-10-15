@@ -13,32 +13,6 @@ import qs.src.services
 PanelWindow {
     id: notch
 
-    component ControlGridCell: Rectangle {
-        required property var grid
-        property int gridColumn: 0
-        property int gridRow: 0
-        property int columnSpan: 1
-        property int rowSpan: 1
-        property color baseColor: "transparent"
-        property color hoverColor: baseColor
-
-        x: (grid.width - (grid.columns * grid.cellWidth
-            + (grid.columns - 1) * grid.gap)) / 2
-            + gridColumn * (grid.cellWidth + grid.gap)
-        y: (grid.height - (grid.rows * grid.cellHeight
-            + (grid.rows - 1) * grid.gap)) / 2
-            + gridRow * (grid.cellHeight + grid.gap)
-        width: columnSpan * grid.cellWidth + (columnSpan - 1) * grid.gap
-        height: rowSpan * grid.cellHeight + (rowSpan - 1) * grid.gap
-        color: tileHover.hovered ? hoverColor : baseColor
-
-
-        HoverHandler {
-            id: tileHover
-            cursorShape: Qt.PointingHandCursor
-        }
-    }
-
     // The two shoulders fill the space above a concave quarter-circle where
     // the notch meets the top edge. They stay outside surface.clip so the
     // launcher and OSD keep their existing rounded bottom corners.
@@ -154,7 +128,7 @@ PanelWindow {
     property int wallpaperIndex: 0
     property bool modeTransitioning: false
     readonly property int menuWidth: Math.round((launcherMode === "wallpapers"
-        ? 640 : 420) * Config.uiScale)
+        ? 640 : (launcherMode === "control" ? 380 : 420)) * Config.uiScale)
     readonly property bool actionSearch: notch.searchQuery.startsWith(">")
     readonly property bool calculatorActive: Calculator.active
         && Calculator.query === notch.searchQuery.trim()
@@ -170,6 +144,9 @@ PanelWindow {
         if (query.startsWith(">")) {
             const actionQuery = query.slice(1).trim();
             const actions = [{
+                name: "Control center",
+                isControlAction: true
+            }, {
                 name: "Wallpapers",
                 isWallpaperAction: true
             }, {
@@ -196,7 +173,7 @@ PanelWindow {
     readonly property int pillShoulderSize: 12
     readonly property int osdCornerRadius: 12
     readonly property int menuCornerRadius: launcherMode === "wallpapers"
-        ? 34 : 24
+        ? 34 : (launcherMode === "control" ? 28 : 24)
     property real animatedMenuRadius: menuCornerRadius
     Behavior on animatedMenuRadius {
         SpringAnimation {
@@ -209,8 +186,9 @@ PanelWindow {
     readonly property int menuHeight: Math.round(
         (launcherMode === "wallpapers"
             ? 250
-            : Math.max(90, Math.min(360,
-                54 + Math.max(1, launcherEntries.length) * 36)))
+            : (launcherMode === "control" ? 198
+                : Math.max(90, Math.min(360,
+                    54 + Math.max(1, launcherEntries.length) * 36))))
         * Config.uiScale)
     property string osdMode: ""
     property bool displaying: false
@@ -231,6 +209,8 @@ PanelWindow {
     function launcherIcon(entry) {
         if (entry.isCalculatorResult)
             return Icon.getPath("calculator");
+        if (entry.isControlAction)
+            return Icon.getPath("control-center");
         if (entry.isWallpaperAction)
             return Icon.getPath("wallpaper");
         if (entry.isThemeAction)
@@ -250,7 +230,9 @@ PanelWindow {
             }
             return;
         }
-        if (entry.isThemeAction) {
+        if (entry.isControlAction) {
+            notch.openControlCenter();
+        } else if (entry.isThemeAction) {
             Theme.toggle();
             notch.toggleMenu();
         } else if (entry.isActionPrefix)
@@ -267,6 +249,8 @@ PanelWindow {
     readonly property bool osdActive: osdMode !== ""
     property bool ready: false
     property bool suppressExternalOsd: false
+    property bool doNotDisturb: false
+    property string doNotDisturbError: ""
     Component.onCompleted: refreshWallpapers()
 
     function toggleMenu() {
@@ -378,6 +362,22 @@ PanelWindow {
         selectedIndex = 0;
     }
 
+    function openControlCenter() {
+        if (!menuOpen) {
+            hideTimer.stop();
+            exitTimer.stop();
+            osdMode = "";
+            displaying = false;
+            menuClosing = false;
+            menuOpening = true;
+            menuOpen = true;
+        }
+        modeTransitioning = true;
+        launcherMode = "control";
+        modeAnimationTimer.restart();
+        Qt.callLater(function() { controlPanel.forceActiveFocus(); });
+    }
+
     function wallpaperAt(offset) {
         if (wallpapers.length === 0)
             return "";
@@ -411,6 +411,23 @@ PanelWindow {
 
     Process {
         id: wallpaperApply
+    }
+
+    Process {
+        id: dndProcess
+        onExited: function(exitCode) {
+            doNotDisturbError = exitCode === 0
+                ? "" : "Do not disturb is unavailable";
+        }
+    }
+
+    onDoNotDisturbChanged: {
+        doNotDisturbError = "";
+        if (!dndProcess.running) {
+            dndProcess.command = ["makoctl", "mode",
+                doNotDisturb ? "-a" : "-r", "do-not-disturb"];
+            dndProcess.running = true;
+        }
     }
 
     Timer {
@@ -829,6 +846,11 @@ PanelWindow {
                 }
 
             }
+        }
+
+        ControlCenterPanel {
+            id: controlPanel
+            notchWindow: notch
         }
 
         Item {

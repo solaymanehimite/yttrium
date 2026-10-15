@@ -9,6 +9,7 @@ RowLayout {
     id: indicators
 
     signal volumeClicked()
+    signal controlCenterClicked()
     required property var barWindow
 
     anchors.right: parent.right
@@ -67,6 +68,10 @@ RowLayout {
             darkIcon: !Theme.dark
         }
         HoverHandler { id: networkHover; cursorShape: Qt.PointingHandCursor }
+        MouseArea {
+            anchors.fill: parent
+            onClicked: indicators.controlCenterClicked()
+        }
     }
 
     Item {
@@ -86,6 +91,10 @@ RowLayout {
             rasterScale: 1.0
         }
         HoverHandler { id: batteryHover; cursorShape: Qt.PointingHandCursor }
+        MouseArea {
+            anchors.fill: parent
+            onClicked: indicators.controlCenterClicked()
+        }
     }
 
     Clock {

@@ -64,6 +64,11 @@ Singleton {
         return Math.max(0, Math.min(1, Number(value)));
     }
 
+    function setBrightness(value) {
+        const next = clamp(value);
+        return adjustRelative(next - brightness);
+    }
+
     function adjustRelative(delta) {
         if (!backlightPath || max <= 0)
             return -1;

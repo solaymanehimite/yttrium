@@ -34,6 +34,7 @@ PanelWindow {
     RightIndicators {
         barWindow: bar
         onVolumeClicked: notch.show("volume")
+        onControlCenterClicked: notch.openControlCenter()
     }
     Notch {
         id: notch

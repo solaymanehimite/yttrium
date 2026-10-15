@@ -64,6 +64,14 @@ Singleton {
     readonly property color notchGradientMid: "#f2000000"
     readonly property color notchGradientBottom: "#e6000000"
     readonly property color notchShadow: "#000000"
+    readonly property color controlTile: "transparent"
+    readonly property color controlTileHover: "#1affffff"
+    readonly property color controlActiveTop: "#ffffffff"
+    readonly property color controlActiveBottom: "#99ffffff"
+    readonly property color controlTileActiveText: "#000000"
+    readonly property color controlSliderTrack: "#38383f"
+    readonly property color controlSliderKnob: "#e5e5e7"
+    readonly property color controlSliderIcon: "#24242a"
 
     function toggle() {
         dark = !dark;

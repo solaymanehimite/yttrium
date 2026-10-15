@@ -17,6 +17,16 @@ Singleton {
         Pipewire.defaultAudioSink?.audio.muted ?? false;
     }
 
+    function setVolume(value) {
+        const sink = Pipewire.defaultAudioSink;
+        if (!sink || !sink.ready || !sink.audio)
+            return -1;
+        const next = Math.max(0, Math.min(1, Number(value)));
+        sink.audio.muted = false;
+        sink.audio.volume = next;
+        return next;
+    }
+
     function adjustRelative(delta) {
         const sink = Pipewire.defaultAudioSink;
         if (!sink || !sink.ready || !sink.audio)
