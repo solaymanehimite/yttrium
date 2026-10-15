@@ -96,16 +96,6 @@ PanelWindow {
         });
     }
 
-    function contentHeight() {
-        let value = 10 + (root.canGoBack ? 30 : 0);
-        for (let i = 0; i < root.currentItems.length; i++) {
-            const item = root.currentItems[i];
-            if (item && item.visible !== false)
-                value += item.type === "separator" ? 8 : 32;
-        }
-        return value;
-    }
-
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
@@ -146,7 +136,10 @@ PanelWindow {
         x: root.menuX
         y: root.menuY
         width: root.menuWidth
-        height: Math.min(Math.max(38, root.contentHeight()), root.height - y - 10)
+        // Derive the popup height from the rendered rows so scaled rows and
+        // hidden delegates cannot accumulate incorrect bottom space.
+        height: Math.min(Math.max(38, menuColumn.implicitHeight + 12),
+            root.height - y - 10)
         radius: 12
         color: Theme.menuBackground
         border.width: 1
