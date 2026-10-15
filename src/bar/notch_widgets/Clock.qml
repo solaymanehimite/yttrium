@@ -5,8 +5,6 @@ import qs.src.services
 Item {
     id: root
 
-    signal clicked()
-
     implicitWidth: clockRow.implicitWidth
     implicitHeight: clockRow.implicitHeight
     Layout.preferredWidth: implicitWidth
@@ -48,11 +46,5 @@ Item {
             font.pixelSize: Math.round(15 * Config.uiScale)
             font.weight: 550
         }
-    }
-
-    MouseArea {
-        anchors.fill: parent
-        cursorShape: Qt.PointingHandCursor
-        onClicked: root.clicked()
     }
 }

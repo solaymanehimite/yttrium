@@ -1,9 +1,5 @@
 import Quickshell
 import Quickshell.Io
-import Quickshell.Bluetooth
-import Quickshell.Networking
-import Quickshell.Services.Mpris
-import Quickshell.Services.Notifications
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Shapes
@@ -11,23 +7,11 @@ import QtQuick.Effects
 import Quickshell.Wayland
 
 import qs.src.bar.notch_modes
-import qs.src.bar.notch_widgets as NotchWidgets
 import qs.src.services
 
 // One top surface hosts transient OSDs and several focused menu modes.
 PanelWindow {
     id: notch
-
-    // Quickshell owns the freedesktop notification service, so applications
-    // have a real notification endpoint even when no desktop daemon is set up.
-    NotificationServer {
-        id: notificationServer
-        keepOnReload: true
-        bodySupported: true
-        bodyMarkupSupported: false
-        actionsSupported: true
-        imageSupported: true
-    }
 
     component ControlGridCell: Rectangle {
         required property var grid
@@ -134,38 +118,10 @@ PanelWindow {
 
         OsdModal {
             anchors.fill: parent
-            visible: mode !== "notification"
             iconSource: mode === "brightness" ? Icon.getPath("sun") : notch.volumeIcon
             title: mode === "brightness" ? "Brightness" : (Audio.muted ? "Muted" : "Volume")
             value: mode === "brightness" ? notch.brightnessFrac : notch.volumeFrac
             muted: mode === "volume" && Audio.muted
-        }
-
-        RowLayout {
-            anchors.fill: parent
-            visible: mode === "notification"
-            spacing: Config.space8
-
-            Image {
-                Layout.preferredWidth: 16
-                Layout.preferredHeight: 16
-                source: notch.notificationIcon
-                sourceSize: Qt.size(16, 16)
-                fillMode: Image.PreserveAspectFit
-            }
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Config.space0
-                Text {
-                    Layout.fillWidth: true
-                    text: notch.notificationTitle
-                    color: Theme.textOnDark
-                    elide: Text.ElideRight
-                    font.family: Config.fontFamily
-                    font.pixelSize: Math.round(13 * Config.uiScale)
-                    font.weight: 600
-                }
-            }
         }
     }
 
@@ -194,66 +150,11 @@ PanelWindow {
 
     property string searchQuery: ""
     property string launcherMode: "apps"
-    property var notifications: []
-    property var currentNotification: null
-    readonly property int notificationCount: notifications.length
-    readonly property string notificationTitle: currentNotification
-        ? String(currentNotification.summary || currentNotification.appName || "Notification")
-        : "Notification"
-    readonly property string notificationBody: currentNotification
-        ? String(currentNotification.body || "")
-        : ""
-    readonly property string notificationIcon: currentNotification && currentNotification.image
-        ? currentNotification.image : Icon.getPath("bell")
     property int selectedIndex: 0
     property int wallpaperIndex: 0
     property bool modeTransitioning: false
-    readonly property string wifiStatus: {
-        if (!Networking.wifiHardwareEnabled)
-            return "Unavailable";
-        return Networking.wifiEnabled ? "On" : "Off";
-    }
-    readonly property var mediaPlayer: {
-        const players = Mpris.players.values;
-        let paused = null;
-        for (let i = 0; i < players.length; i++) {
-            if (players[i].isPlaying)
-                return players[i];
-            if (!paused && players[i].playbackState === MprisPlaybackState.Paused)
-                paused = players[i];
-        }
-        return paused || (players.length > 0 ? players[0] : null);
-    }
-    readonly property string mediaTitle: mediaPlayer && mediaPlayer.trackTitle
-        ? mediaPlayer.trackTitle : "Not Playing"
-
-    readonly property var bluetoothAdapter: Bluetooth.defaultAdapter
-    readonly property bool bluetoothChanging: bluetoothAdapter
-        && (bluetoothAdapter.state === BluetoothAdapterState.Enabling
-            || bluetoothAdapter.state === BluetoothAdapterState.Disabling)
-    readonly property bool bluetoothCanToggle: bluetoothAdapter
-        && bluetoothAdapter.state !== BluetoothAdapterState.Blocked
-        && !bluetoothChanging
-    readonly property string bluetoothIconName: bluetoothChanging
-        ? "bluetooth/connecting"
-        : (bluetoothAdapter && bluetoothAdapter.enabled
-            ? "bluetooth/on" : "bluetooth/off")
-    readonly property string bluetoothStatus: {
-        if (!bluetoothAdapter)
-            return "Unavailable";
-        if (bluetoothChanging)
-            return bluetoothAdapter.state === BluetoothAdapterState.Enabling
-                ? "Turning on" : "Turning off";
-        if (bluetoothAdapter.state === BluetoothAdapterState.Blocked)
-            return "Blocked";
-        return bluetoothAdapter.enabled ? "On" : "Off";
-    }
-    property var calendarEvents: []
-    property bool calendarEventsAvailable: false
-    readonly property bool wideMenuMode: launcherMode === "control"
-        || launcherMode === "notifications" || launcherMode === "calendar"
     readonly property int menuWidth: Math.round((launcherMode === "wallpapers"
-        ? 640 : (wideMenuMode ? 560 : 420)) * Config.uiScale)
+        ? 640 : 420) * Config.uiScale)
     readonly property bool actionSearch: notch.searchQuery.startsWith(">")
     readonly property bool calculatorActive: Calculator.active
         && Calculator.query === notch.searchQuery.trim()
@@ -271,12 +172,6 @@ PanelWindow {
             const actions = [{
                 name: "Wallpapers",
                 isWallpaperAction: true
-            }, {
-                name: "Calendar",
-                isCalendarAction: true
-            }, {
-                name: "Control center",
-                isControlAction: true
             }, {
                 name: Theme.dark ? "Use light theme" : "Use dark theme",
                 isThemeAction: true
@@ -299,9 +194,9 @@ PanelWindow {
     readonly property int osdHeight: Math.round(32 * Config.uiScale)
     readonly property int osdContentInset: 18
     readonly property int pillShoulderSize: 12
-    readonly property int menuCornerRadius: wideMenuMode
-        ? Config.menuRadius
-        : (launcherMode === "wallpapers" ? 34 : 24)
+    readonly property int osdCornerRadius: 12
+    readonly property int menuCornerRadius: launcherMode === "wallpapers"
+        ? 34 : 24
     property real animatedMenuRadius: menuCornerRadius
     Behavior on animatedMenuRadius {
         SpringAnimation {
@@ -311,11 +206,12 @@ PanelWindow {
             epsilon: 0.01
         }
     }
-    readonly property int menuHeight: Math.round((launcherMode === "wallpapers"
-        ? 250
-        : (wideMenuMode ? 230
+    readonly property int menuHeight: Math.round(
+        (launcherMode === "wallpapers"
+            ? 250
             : Math.max(90, Math.min(360,
-                54 + Math.max(1, launcherEntries.length) * 36))) ) * Config.uiScale)
+                54 + Math.max(1, launcherEntries.length) * 36)))
+        * Config.uiScale)
     property string osdMode: ""
     property bool displaying: false
     property bool osdClosing: false
@@ -337,10 +233,6 @@ PanelWindow {
             return Icon.getPath("calculator");
         if (entry.isWallpaperAction)
             return Icon.getPath("wallpaper");
-        if (entry.isControlAction)
-            return Icon.getPath("control-center");
-        if (entry.isCalendarAction)
-            return Icon.getPath("calendar");
         if (entry.isThemeAction)
             return Icon.getPath("theme");
         if (entry.isActionPrefix)
@@ -358,11 +250,7 @@ PanelWindow {
             }
             return;
         }
-        if (entry.isControlAction)
-            notch.openControlCenter();
-        else if (entry.isCalendarAction)
-            notch.openCalendar();
-        else if (entry.isThemeAction) {
+        if (entry.isThemeAction) {
             Theme.toggle();
             notch.toggleMenu();
         } else if (entry.isActionPrefix)
@@ -379,36 +267,7 @@ PanelWindow {
     readonly property bool osdActive: osdMode !== ""
     property bool ready: false
     property bool suppressExternalOsd: false
-    property bool doNotDisturb: false
-    property string doNotDisturbError: ""
-
     Component.onCompleted: refreshWallpapers()
-
-    Connections {
-        target: notificationServer
-        function onNotification(notification) {
-            notification.tracked = true;
-            notch.notifications = [notification].concat(notch.notifications);
-            notch.showNotification(notification);
-            notification.closed.connect(function() {
-                notch.notifications = notch.notifications.filter(item => item.id !== notification.id);
-            });
-        }
-    }
-
-    function showNotification(notification) {
-        if (!notch.ready || notch.menuOpen || notch.menuOpening || notch.menuClosing)
-            return;
-        notch.currentNotification = notification;
-        notch.osdMode = "notification";
-        notch.displaying = true;
-        notch.osdClosing = false;
-        exitTimer.stop();
-        hideTimer.restart();
-        scaleAnimation.stop();
-        verticalScale.yScale = 1;
-    }
-
 
     function toggleMenu() {
         scaleAnimation.stop();
@@ -507,7 +366,6 @@ PanelWindow {
     }
 
     function openAppSearch() {
-        closeControlCenter();
         launcherMode = "apps";
         searchInput.text = "";
         searchInput.forceActiveFocus();
@@ -518,62 +376,6 @@ PanelWindow {
         searchInput.text = ">";
         searchInput.forceActiveFocus();
         selectedIndex = 0;
-    }
-
-    function openNotifications() {
-        if (!menuOpen) {
-            hideTimer.stop();
-            exitTimer.stop();
-            osdMode = "";
-            displaying = false;
-            menuClosing = false;
-            menuOpening = true;
-            menuOpen = true;
-        }
-        modeTransitioning = true;
-        launcherMode = "notifications";
-        modeAnimationTimer.restart();
-        Qt.callLater(function() { notificationPanel.forceActiveFocus(); });
-    }
-
-    function openControlCenter() {
-        if (!menuOpen) {
-            hideTimer.stop();
-            exitTimer.stop();
-            osdMode = "";
-            displaying = false;
-            menuClosing = false;
-            menuOpening = true;
-            menuOpen = true;
-        }
-        modeTransitioning = true;
-        launcherMode = "control";
-        modeAnimationTimer.restart();
-        Qt.callLater(function() { controlPanel.forceActiveFocus(); });
-    }
-
-    function openCalendar() {
-        if (!menuOpen) {
-            hideTimer.stop();
-            exitTimer.stop();
-            osdMode = "";
-            displaying = false;
-            menuClosing = false;
-            menuOpening = true;
-            menuOpen = true;
-        }
-        modeTransitioning = true;
-        launcherMode = "calendar";
-        modeAnimationTimer.restart();
-        Qt.callLater(function() { calendarPanel.forceActiveFocus(); });
-    }
-
-    function closeControlCenter() {
-        modeTransitioning = true;
-        launcherMode = "apps";
-        searchQuery = "";
-        modeAnimationTimer.restart();
-        Qt.callLater(function() { searchInput.forceActiveFocus(); });
     }
 
     function wallpaperAt(offset) {
@@ -609,23 +411,6 @@ PanelWindow {
 
     Process {
         id: wallpaperApply
-    }
-
-    Process {
-        id: dndProcess
-        onExited: function(exitCode) {
-            doNotDisturbError = exitCode === 0
-                ? "" : "Do not disturb is unavailable"
-        }
-    }
-
-    onDoNotDisturbChanged: {
-        doNotDisturbError = "";
-        if (!dndProcess.running) {
-            dndProcess.command = ["makoctl", "mode",
-                doNotDisturb ? "-a" : "-r", "do-not-disturb"];
-            dndProcess.running = true;
-        }
     }
 
     Timer {
@@ -758,6 +543,49 @@ PanelWindow {
             : (notch.osdActive || notch.osdClosing ? notch.pillShoulderSize : 18)
     }
 
+    // Pad the shadow source explicitly so the GPU effect never changes the
+    // notch geometry or gets clipped at its edges.
+    Item {
+        id: notchShadow
+        x: surface.x - 24
+        y: surface.y - 24
+        width: surface.width + 48
+        height: surface.height + 48
+        visible: surface.height > 0
+        z: -1
+        opacity: Math.min(1, surface.height / 12)
+        transform: Scale {
+            origin.x: notchShadow.width / 2
+            origin.y: 24
+            yScale: verticalScale.yScale
+        }
+
+        Rectangle {
+            x: 24
+            y: 24
+            width: parent.width - 48
+            height: parent.height - 48
+            color: Theme.notchShadow
+            topLeftRadius: 0
+            topRightRadius: 0
+            bottomLeftRadius: notch.menuOpen || notch.menuClosing
+                ? Math.min(height / 2, notch.animatedMenuRadius)
+                : Math.min(height / 2, notch.osdCornerRadius)
+            bottomRightRadius: bottomLeftRadius
+        }
+
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Theme.notchShadow
+            shadowBlur: 1.0
+            shadowHorizontalOffset: 0
+            shadowVerticalOffset: 0
+            shadowOpacity: 0.8
+            autoPaddingEnabled: false
+        }
+    }
+
     Rectangle {
         id: surface
         anchors.horizontalCenter: parent.horizontalCenter
@@ -779,7 +607,8 @@ PanelWindow {
         topLeftRadius: 0
         topRightRadius: 0
         bottomLeftRadius: notch.menuOpen || notch.menuClosing
-            ? Math.min(height / 2, notch.animatedMenuRadius) : height / 2
+            ? Math.min(height / 2, notch.animatedMenuRadius)
+            : Math.min(height / 2, notch.osdCornerRadius)
         bottomRightRadius: bottomLeftRadius
         color: "transparent"
         border.width: 0
@@ -1002,23 +831,6 @@ PanelWindow {
             }
         }
 
-        CalendarPanel {
-            id: calendarPanel
-            notchWindow: notch
-            events: notch.calendarEvents
-            eventsAvailable: notch.calendarEventsAvailable
-        }
-
-        ControlCenterPanel {
-            id: controlPanel
-            notchWindow: notch
-        }
-
-        NotificationsPanel {
-            id: notificationPanel
-            notchWindow: notch
-        }
-
         Item {
             id: wallpaperPanel
             anchors.fill: parent
@@ -1181,6 +993,5 @@ PanelWindow {
 
         NotchOsd { mode: "volume" }
         NotchOsd { mode: "brightness" }
-        NotchOsd { mode: "notification" }
     }
 }

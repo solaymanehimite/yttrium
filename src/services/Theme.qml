@@ -63,6 +63,7 @@ Singleton {
     readonly property color notchGradientTop: "#ff000000"
     readonly property color notchGradientMid: "#f2000000"
     readonly property color notchGradientBottom: "#e6000000"
+    readonly property color notchShadow: "#000000"
 
     function toggle() {
         dark = !dark;

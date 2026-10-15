@@ -33,9 +33,7 @@ PanelWindow {
     }
     RightIndicators {
         barWindow: bar
-        onControlCenterClicked: notch.openControlCenter()
         onVolumeClicked: notch.show("volume")
-        onCalendarClicked: notch.openCalendar()
     }
     Notch {
         id: notch
