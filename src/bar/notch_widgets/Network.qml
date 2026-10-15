@@ -41,11 +41,11 @@ Image {
     }
 
         source: Icon.getPath(network.currentIcon + (network.darkIcon ? "_black" : ""))
-        width: 15
-        height: 15
+        width: 16
+        height: 16
         sourceSize.width: 15 * network.rasterScale
         sourceSize.height: 15 * network.rasterScale
-        Layout.preferredWidth: 15
-        Layout.preferredHeight: 15
+        Layout.preferredWidth: 16
+        Layout.preferredHeight: 16
         smooth: true
 }

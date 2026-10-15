@@ -24,7 +24,7 @@ RowLayout {
         }
     }
 
-    spacing: 8
+    spacing: 10
 
     function clamped(v) {
         if (isNaN(v) || v === undefined || v === null)

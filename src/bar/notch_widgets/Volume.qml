@@ -6,13 +6,13 @@ Image {
 
     property real rasterScale: 1.0
 
-    width: 15
-    height: 15
+    width: 16
+    height: 16
     sourceSize.width: 15 * volume.rasterScale
     sourceSize.height: 15 * volume.rasterScale
     Layout.alignment: Qt.AlignVCenter
-    Layout.preferredWidth: 15
-    Layout.preferredHeight: 15
+    Layout.preferredWidth: 16
+    Layout.preferredHeight: 16
     smooth: true
     asynchronous: true
 }

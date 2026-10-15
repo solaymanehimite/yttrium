@@ -14,7 +14,7 @@ import qs.src.bar.notch_modes
 import qs.src.bar.notch_widgets as NotchWidgets
 import qs.src.services
 
-// One top-surface with two states: a transient OSD and an expandable menu.
+// One top surface hosts transient OSDs and several focused menu modes.
 PanelWindow {
     id: notch
 
@@ -117,8 +117,8 @@ PanelWindow {
             top: parent.top
             left: parent.left
             right: parent.right
-            leftMargin: notch.pillContentInset
-            rightMargin: notch.pillContentInset
+            leftMargin: notch.osdContentInset
+            rightMargin: notch.osdContentInset
         }
         height: notch.osdHeight
         visible: active || opacity > 0
@@ -169,46 +169,6 @@ PanelWindow {
         }
     }
 
-    component MediaControl: Item {
-        id: mediaControl
-        required property string iconName
-        property bool active: false
-        signal triggered()
-
-        width: 22
-        height: 22
-        opacity: enabled ? (active || controlHover.hovered ? 1 : 0.72) : 0.28
-
-        Behavior on opacity {
-            SpringAnimation {
-                spring: 11
-                damping: 0.75
-                mass: 1.6
-                epsilon: 0.01
-            }
-        }
-
-        Image {
-            anchors.centerIn: parent
-            width: 18
-            height: 18
-            source: Icon.getPath(mediaControl.iconName)
-            sourceSize: Qt.size(18, 18)
-            fillMode: Image.PreserveAspectFit
-            smooth: true
-        }
-
-        HoverHandler {
-            id: controlHover
-            cursorShape: mediaControl.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        }
-
-        TapHandler {
-            enabled: mediaControl.enabled
-            onTapped: mediaControl.triggered()
-        }
-    }
-
     screen: bar.screen
     // Keep the full-screen layer alive below windows while idle. Recreating it
     // on each OSD or launcher transition causes visible stalls.
@@ -223,13 +183,11 @@ PanelWindow {
     }
 
     WlrLayershell.layer: menuOpen || menuClosing || displaying || osdClosing
-        || transitioning || mediaPlaying || mediaPaused || mediaClosing
-        ? WlrLayer.Overlay : WlrLayer.Bottom
+        || transitioning ? WlrLayer.Overlay : WlrLayer.Bottom
     WlrLayershell.keyboardFocus: menuOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.namespace: "quickshell-notch-launcher"
-    // The persistent media pill must not block input to the desktop beneath
-    // the rest of this full-screen overlay. Menus still close on outside clicks.
+    // Only menus and transient OSDs claim input above the desktop.
     mask: Region {
         item: notch.menuOpen || notch.menuClosing ? notch.contentItem : surface
     }
@@ -268,59 +226,6 @@ PanelWindow {
     }
     readonly property string mediaTitle: mediaPlayer && mediaPlayer.trackTitle
         ? mediaPlayer.trackTitle : "Not Playing"
-    readonly property bool mediaPlaying: !!(mediaPlayer && mediaPlayer.isPlaying)
-    readonly property bool mediaPaused: !!(mediaPlayer
-        && mediaPlayer.playbackState === MprisPlaybackState.Paused)
-    readonly property string mediaArtworkUrl: {
-        if (!mediaPlayer)
-            return "";
-        if (mediaPlayer.trackArtUrl)
-            return mediaPlayer.trackArtUrl;
-        // Firefox sometimes omits mpris:artUrl for YouTube videos.
-        const metadata = mediaPlayer.metadata || {};
-        const url = String(metadata["xesam:url"] || "");
-        if (/^https:\/\/(?:www\.|music\.)?youtube\.com\/watch\?/.test(url)) {
-            const match = url.match(/[?&]v=([\w-]{11})/);
-            if (match)
-                return "https://i.ytimg.com/vi/" + match[1] + "/mqdefault.jpg";
-        }
-        return "";
-    }
-    readonly property int mediaWidth: 216
-    readonly property var mediaBarSteps: [
-        [4, 8, 12, 7, 5], [7, 11, 5, 10, 4], [10, 5, 9, 4, 11],
-        [5, 12, 6, 9, 7], [8, 4, 11, 6, 10], [6, 9, 4, 12, 5]
-    ]
-    property int mediaBarFrame: 0
-    property bool mediaClosing: false
-
-    onMediaPlayingChanged: {
-        if (mediaPlaying) {
-            mediaClosing = false;
-            mediaCloseTimer.stop();
-            if (!menuOpen && !osdActive && !osdClosing) {
-                scaleAnimation.stop();
-                verticalScale.yScale = 1;
-            }
-        } else if (!mediaPaused) {
-            mediaClosing = true;
-            mediaCloseTimer.restart();
-        }
-    }
-
-    onMediaPausedChanged: {
-        if (mediaPaused) {
-            mediaClosing = false;
-            mediaCloseTimer.stop();
-            if (!menuOpen && !osdActive && !osdClosing) {
-                scaleAnimation.stop();
-                verticalScale.yScale = 1;
-            }
-        } else if (!mediaPlaying) {
-            mediaClosing = true;
-            mediaCloseTimer.restart();
-        }
-    }
 
     readonly property var bluetoothAdapter: Bluetooth.defaultAdapter
     readonly property bool bluetoothChanging: bluetoothAdapter
@@ -343,16 +248,32 @@ PanelWindow {
             return "Blocked";
         return bluetoothAdapter.enabled ? "On" : "Off";
     }
+    property var calendarEvents: []
+    property bool calendarEventsAvailable: false
+    readonly property bool wideMenuMode: launcherMode === "control"
+        || launcherMode === "notifications" || launcherMode === "calendar"
     readonly property int menuWidth: Math.round((launcherMode === "wallpapers"
-        ? 640 : ((launcherMode === "control" || launcherMode === "notifications") ? 560 : 420)) * Config.uiScale)
+        ? 640 : (wideMenuMode ? 560 : 420)) * Config.uiScale)
     readonly property bool actionSearch: notch.searchQuery.startsWith(">")
+    readonly property bool calculatorActive: Calculator.active
+        && Calculator.query === notch.searchQuery.trim()
     readonly property var launcherEntries: {
         const query = notch.searchQuery.trim().toLowerCase();
+        if (notch.calculatorActive) {
+            return [{
+                name: Calculator.evaluating ? "Calculating…"
+                    : (Calculator.result || Calculator.error || "No result"),
+                isCalculatorResult: true
+            }];
+        }
         if (query.startsWith(">")) {
             const actionQuery = query.slice(1).trim();
             const actions = [{
                 name: "Wallpapers",
                 isWallpaperAction: true
+            }, {
+                name: "Calendar",
+                isCalendarAction: true
             }, {
                 name: "Control center",
                 isControlAction: true
@@ -376,9 +297,10 @@ PanelWindow {
         return apps.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     }
     readonly property int osdHeight: Math.round(32 * Config.uiScale)
-    readonly property int pillContentInset: 12
+    readonly property int osdContentInset: 18
     readonly property int pillShoulderSize: 12
-    readonly property int menuCornerRadius: (launcherMode === "control" || launcherMode === "notifications") ? 44
+    readonly property int menuCornerRadius: wideMenuMode
+        ? Tokens.menuRadius
         : (launcherMode === "wallpapers" ? 34 : 24)
     property real animatedMenuRadius: menuCornerRadius
     Behavior on animatedMenuRadius {
@@ -389,11 +311,9 @@ PanelWindow {
             epsilon: 0.01
         }
     }
-    readonly property int controlInset: Math.round(22 * Config.uiScale)
-    readonly property real controlTileRadius: animatedMenuRadius - controlInset
     readonly property int menuHeight: Math.round((launcherMode === "wallpapers"
         ? 250
-        : ((launcherMode === "control" || launcherMode === "notifications") ? 230
+        : (wideMenuMode ? 230
             : Math.max(90, Math.min(360,
                 54 + Math.max(1, launcherEntries.length) * 36))) ) * Config.uiScale)
     property string osdMode: ""
@@ -411,11 +331,56 @@ PanelWindow {
             Qt.callLater(function() { searchInput.forceActiveFocus(); });
         }
     }
+
+    function launcherIcon(entry) {
+        if (entry.isCalculatorResult)
+            return Icon.getPath("calculator");
+        if (entry.isWallpaperAction)
+            return Icon.getPath("wallpaper");
+        if (entry.isControlAction)
+            return Icon.getPath("control-center");
+        if (entry.isCalendarAction)
+            return Icon.getPath("calendar");
+        if (entry.isThemeAction)
+            return Icon.getPath("theme");
+        if (entry.isActionPrefix)
+            return Icon.getPath("actions");
+        return Quickshell.iconPath(entry.icon, true);
+    }
+
+    function activateLauncherEntry(entry) {
+        if (!entry)
+            return;
+        if (entry.isCalculatorResult) {
+            if (Calculator.result) {
+                Calculator.copy();
+                notch.toggleMenu();
+            }
+            return;
+        }
+        if (entry.isControlAction)
+            notch.openControlCenter();
+        else if (entry.isCalendarAction)
+            notch.openCalendar();
+        else if (entry.isThemeAction) {
+            Theme.toggle();
+            notch.toggleMenu();
+        } else if (entry.isActionPrefix)
+            notch.openActionSearch();
+        else if (entry.isWallpaperAction)
+            notch.openWallpaperMode();
+        else {
+            entry.execute();
+            notch.toggleMenu();
+        }
+    }
+
     property bool transitioning: false
     readonly property bool osdActive: osdMode !== ""
     property bool ready: false
     property bool suppressExternalOsd: false
     property bool doNotDisturb: false
+    property string doNotDisturbError: ""
 
     Component.onCompleted: refreshWallpapers()
 
@@ -465,7 +430,7 @@ PanelWindow {
         hideTimer.stop();
         exitTimer.stop();
         notch.morphingFromOsd = notch.osdActive || notch.osdClosing
-            || notch.displaying || notch.mediaPlaying || notch.mediaPaused;
+            || notch.displaying;
         notch.osdTransitioning = notch.morphingFromOsd;
         if (!notch.morphingFromOsd)
             notch.osdMode = "";
@@ -587,6 +552,22 @@ PanelWindow {
         Qt.callLater(function() { controlPanel.forceActiveFocus(); });
     }
 
+    function openCalendar() {
+        if (!menuOpen) {
+            hideTimer.stop();
+            exitTimer.stop();
+            osdMode = "";
+            displaying = false;
+            menuClosing = false;
+            menuOpening = true;
+            menuOpen = true;
+        }
+        modeTransitioning = true;
+        launcherMode = "calendar";
+        modeAnimationTimer.restart();
+        Qt.callLater(function() { calendarPanel.forceActiveFocus(); });
+    }
+
     function closeControlCenter() {
         modeTransitioning = true;
         launcherMode = "apps";
@@ -632,9 +613,14 @@ PanelWindow {
 
     Process {
         id: dndProcess
+        onExited: function(exitCode) {
+            doNotDisturbError = exitCode === 0
+                ? "" : "Do not disturb is unavailable"
+        }
     }
 
     onDoNotDisturbChanged: {
+        doNotDisturbError = "";
         if (!dndProcess.running) {
             dndProcess.command = ["makoctl", "mode",
                 doNotDisturb ? "-a" : "-r", "do-not-disturb"];
@@ -679,11 +665,6 @@ PanelWindow {
             return;
 
         scaleAnimation.stop();
-        if (notch.mediaPlaying || notch.mediaPaused) {
-            // Keep the existing pill height while the OSD crossfades in.
-            verticalScale.yScale = 1;
-            return;
-        }
         verticalScale.yScale = 0.01;
         Qt.callLater(function() {
             if (notch.displaying && !notch.menuOpen && !notch.osdClosing) {
@@ -691,22 +672,6 @@ PanelWindow {
                 scaleAnimation.restart();
             }
         });
-    }
-
-    // Five short bars update at four steps per second, without audio capture or Canvas.
-    Timer {
-        interval: 240
-        running: notch.mediaPlaying && !notch.menuOpen && !notch.menuClosing
-            && !notch.osdActive && !mediaHover.hovered
-        repeat: true
-        onTriggered: notch.mediaBarFrame = (notch.mediaBarFrame + 1)
-            % notch.mediaBarSteps.length
-    }
-
-    Timer {
-        id: mediaCloseTimer
-        interval: Config.menuAnimation
-        onTriggered: notch.mediaClosing = false
     }
 
     Timer {
@@ -723,14 +688,12 @@ PanelWindow {
             notch.osdClosing = true;
             scaleAnimation.stop();
             verticalScale.yScale = 1;
-            if (!notch.mediaPlaying && !notch.mediaPaused) {
-                Qt.callLater(function() {
-                    if (notch.osdClosing && !notch.mediaPlaying && !notch.mediaPaused) {
-                        scaleAnimation.to = 0.01;
-                        scaleAnimation.restart();
-                    }
-                });
-            }
+            Qt.callLater(function() {
+                if (notch.osdClosing) {
+                    scaleAnimation.to = 0.01;
+                    scaleAnimation.restart();
+                }
+            });
             exitTimer.start();
         }
     }
@@ -783,8 +746,7 @@ PanelWindow {
         scaleY: verticalScale.yScale
         targetSize: notch.menuOpen || notch.menuOpening
             ? (notch.launcherMode === "apps" ? 24 : 30)
-            : (notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
-                || notch.osdActive || notch.osdClosing ? notch.pillShoulderSize : 18)
+            : (notch.osdActive || notch.osdClosing ? notch.pillShoulderSize : 18)
     }
 
     NotchShoulder {
@@ -793,22 +755,15 @@ PanelWindow {
         scaleY: verticalScale.yScale
         targetSize: notch.menuOpen || notch.menuOpening
             ? (notch.launcherMode === "apps" ? 24 : 30)
-            : (notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
-                || notch.osdActive || notch.osdClosing ? notch.pillShoulderSize : 18)
+            : (notch.osdActive || notch.osdClosing ? notch.pillShoulderSize : 18)
     }
 
     Rectangle {
         id: surface
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        width: notch.menuOpen || notch.menuOpening
-            ? notch.menuWidth
-            : (notch.osdActive && !notch.osdClosing
-                ? 300 : (notch.mediaPlaying || notch.mediaPaused || notch.mediaClosing
-                    ? notch.mediaWidth : 300))
-        // Keep every state change springing. Previously this behavior was
-        // disabled as closing flags cleared, so the width binding jumped to
-        // its idle value at the end of the collapse.
+        width: notch.menuOpen || notch.menuOpening ? notch.menuWidth : 300
+        // Keep menu transitions springing instead of snapping between widths.
         Behavior on width {
             SpringAnimation {
                 spring: 9
@@ -819,8 +774,7 @@ PanelWindow {
         }
         height: notch.menuOpen || notch.menuOpening
             ? notch.menuHeight
-            : (notch.osdActive || notch.osdClosing || notch.mediaPlaying
-                || notch.mediaPaused || notch.mediaClosing ? notch.osdHeight : 0)
+            : (notch.osdActive || notch.osdClosing ? notch.osdHeight : 0)
         radius: 0
         topLeftRadius: 0
         topRightRadius: 0
@@ -836,13 +790,6 @@ PanelWindow {
         }
         clip: true
         opacity: 1
-
-        HoverHandler {
-            id: mediaHover
-            enabled: (notch.mediaPlaying || notch.mediaPaused)
-                && !notch.menuOpen && !notch.menuClosing && !notch.osdActive
-            cursorShape: notch.mediaPaused ? Qt.PointingHandCursor : Qt.ArrowCursor
-        }
 
         transform: Scale {
             id: verticalScale
@@ -921,25 +868,13 @@ PanelWindow {
                 onTextChanged: {
                     notch.searchQuery = text;
                     notch.selectedIndex = 0;
+                    Calculator.evaluate(text);
                 }
                 Keys.onPressed: function(event) {
                     if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                        if (notch.launcherEntries.length > 0) {
-                            const selected = notch.launcherEntries[notch.selectedIndex];
-                            if (selected.isControlAction)
-                                notch.openControlCenter();
-                            else if (selected.isThemeAction) {
-                                Theme.toggle();
-                                notch.toggleMenu();
-                            } else if (selected.isActionPrefix)
-                                notch.openActionSearch();
-                            else if (selected.isWallpaperAction)
-                                notch.openWallpaperMode();
-                            else {
-                                selected.execute();
-                                notch.toggleMenu();
-                            }
-                        }
+                        if (notch.launcherEntries.length > 0)
+                            notch.activateLauncherEntry(
+                                notch.launcherEntries[notch.selectedIndex]);
                         event.accepted = true;
                     } else if (event.key === Qt.Key_Down) {
                         notch.selectedIndex = Math.min(
@@ -1010,15 +945,7 @@ PanelWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 20
                             height: 20
-                            source: modelData.isWallpaperAction
-                                ? Icon.getPath("wallpaper")
-                                : (modelData.isControlAction
-                                    ? Icon.getPath("control-center")
-                                    : (modelData.isThemeAction
-                                        ? Icon.getPath("theme")
-                                        : (modelData.isActionPrefix
-                                            ? Icon.getPath("actions")
-                                            : Quickshell.iconPath(modelData.icon, true))))
+                            source: notch.launcherIcon(modelData)
                             fillMode: Image.PreserveAspectFit
                             asynchronous: true
                             smooth: true
@@ -1046,19 +973,7 @@ PanelWindow {
 
                             Keys.onPressed: function(event) {
                                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                    if (modelData.isControlAction)
-                                        notch.openControlCenter();
-                                    else if (modelData.isThemeAction) {
-                                        Theme.toggle();
-                                        notch.toggleMenu();
-                                    } else if (modelData.isActionPrefix)
-                                        notch.openActionSearch();
-                                    else if (modelData.isWallpaperAction)
-                                        notch.openWallpaperMode();
-                                    else {
-                                        modelData.execute();
-                                        notch.toggleMenu();
-                                    }
+                                    notch.activateLauncherEntry(modelData);
                                     event.accepted = true;
                                 } else if (event.key === Qt.Key_Down) {
                                     notch.selectedIndex = Math.min(
@@ -1079,21 +994,7 @@ PanelWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (modelData.isControlAction)
-                                        notch.openControlCenter();
-                                    else if (modelData.isThemeAction) {
-                                        Theme.toggle();
-                                        notch.toggleMenu();
-                                    } else if (modelData.isActionPrefix)
-                                        notch.openActionSearch();
-                                    else if (modelData.isWallpaperAction)
-                                        notch.openWallpaperMode();
-                                    else {
-                                        modelData.execute();
-                                        notch.toggleMenu();
-                                    }
-                                }
+                                onClicked: notch.activateLauncherEntry(modelData)
                             }
                     }
                 }
@@ -1101,449 +1002,21 @@ PanelWindow {
             }
         }
 
-        Item {
+        CalendarPanel {
+            id: calendarPanel
+            notchWindow: notch
+            events: notch.calendarEvents
+            eventsAvailable: notch.calendarEventsAvailable
+        }
+
+        ControlCenterPanel {
             id: controlPanel
-            readonly property int calendarFirstDay: (new Date(Time.year, Time.month, 1).getDay() + 6) % 7
-            readonly property int calendarDays: new Date(Time.year, Time.month + 1, 0).getDate()
-            anchors.fill: parent
-            anchors.margins: 10
-            clip: true
-            readonly property bool active: notch.menuOpen
-                && (notch.launcherMode === "control" || notch.launcherMode === "notifications")
-            visible: active || opacity > 0
-            enabled: active
-            focus: active
-            opacity: active ? 1 : 0
-            scale: active ? 1 : 0.7
-            Behavior on opacity {
-                SpringAnimation {
-                    spring: 11
-                    damping: 0.75
-                    mass: 1.6
-                    epsilon: 0.01
-                }
-            }
-            Behavior on scale {
-                SpringAnimation {
-                    spring: 14
-                    damping: 0.72
-                    mass: 1.4
-                    epsilon: 0.01
-                }
-            }
-
-            Keys.onEscapePressed: notch.closeControlCenter()
-
-            Column {
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 6
-
-                Row {
-                    id: controlContent
-                    width: parent.width
-                    height: parent.height
-                    spacing: 12
-
-                    Column {
-                        id: calendarColumn
-                        width: 200
-                        spacing: 8
-                        transform: Translate { x: 8 }
-
-                        Text {
-                            text: Qt.formatDate(new Date(Time.year, Time.month, 1), "MMMM").toUpperCase()
-                            color: "#4d7dff"
-                            leftPadding: 5
-                            bottomPadding: 5
-                            font.family: Config.fontFamily
-                            font.pixelSize: Math.round(13 * Config.uiScale)
-                            font.weight: 550
-                        }
-
-                        Row {
-                            spacing: 8
-                            Repeater {
-                                model: ["M", "T", "W", "T", "F", "S", "S"]
-                                Text {
-                                    required property string modelData
-                                    width: 24
-                                    text: modelData
-                                    color: "#c8ccd2"
-                                    font.family: Config.fontFamily
-                                    font.pixelSize: Math.round(13 * Config.uiScale)
-                                    horizontalAlignment: Text.AlignHCenter
-                                }
-                            }
-                        }
-
-                        Grid {
-                            columns: 7
-                            columnSpacing: 8
-                            rowSpacing: 6
-                            Repeater {
-                                model: 42
-                                Text {
-                                    required property int index
-                                    property int day: index - controlPanel.calendarFirstDay + 1
-                                    width: 24
-                                    height: 24
-                                    visible: day > 0 && day <= controlPanel.calendarDays
-                                    text: visible ? day : ""
-                                    color: day === Time.day ? "#111214" : "#8e939d"
-                                    font.weight: Font.Normal
-                                    font.family: Config.fontFamily
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                    font.pixelSize: Math.round(13 * Config.uiScale)
-                                    Rectangle {
-                                        visible: day === Time.day
-                                        anchors.centerIn: parent
-                                        width: 26
-                                        height: 26
-                                        radius: width / 2
-                                        color: "#4d7dff"
-                                        z: -1
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Item {
-                        id: controlGrid
-                        visible: (notch.menuOpen || notch.menuClosing)
-                            && (notch.launcherMode === "control"
-                                || notch.launcherMode === "notifications")
-                        opacity: notch.menuOpen && notch.launcherMode === "control" ? 1 : 0
-                        scale: notch.launcherMode === "control" ? 1 : 0.92
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 260
-                                easing.type: Easing.OutCubic
-                            }
-                        }
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 260
-                                easing.type: Easing.OutCubic
-                            }
-                        }
-                        readonly property real gap: 8
-                        readonly property int columns: 4
-                        readonly property int rows: 3
-                        readonly property color activeTileColor: "#f6f8fb"
-                        readonly property color passiveTileColor: "transparent"
-                        readonly property color hoverTileColor: "#1c2026"
-                        readonly property real wideTileSidePadding: 20
-                        readonly property real wideTileIconGap: 12
-                        // Outer control radius minus the panel's 12 + 10 px inset.
-                        readonly property real tileRadius: notch.controlTileRadius
-                        readonly property int titleSize: 14
-                        readonly property int subtitleSize: 12
-                        readonly property real cellSize: Math.min(
-                            (width - (columns - 1) * gap) / columns,
-                            (height - (rows - 1) * gap) / rows)
-                        readonly property real cellWidth: cellSize
-                        readonly property real cellHeight: cellSize
-
-                        width: controlContent.width - calendarColumn.width - controlContent.spacing - 24
-                        height: controlContent.height - 8
-                        y: 8
-                        transform: Translate {
-                            x: 24 + (controlGrid.width
-                                - (controlGrid.columns * controlGrid.cellWidth
-                                    + (controlGrid.columns - 1) * controlGrid.gap)) / 2
-                            y: notch.launcherMode === "notifications" ? -controlGrid.height : 0
-                            Behavior on y {
-                                NumberAnimation {
-                                    duration: 260
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
-                        }
-
-                        ControlGridCell {
-                            grid: controlGrid
-                            gridColumn: 0
-                            gridRow: 0
-                            columnSpan: 2
-                            radius: height / 2
-                            baseColor: Networking.wifiEnabled
-                                ? controlGrid.activeTileColor
-                                : controlGrid.passiveTileColor
-                            hoverColor: Networking.wifiEnabled ? "#d8dde3" : controlGrid.hoverTileColor
-                            opacity: Networking.wifiHardwareEnabled ? 1 : 0.55
-                            Row {
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.verticalCenter: parent.verticalCenter
-                                anchors.leftMargin: controlGrid.wideTileSidePadding
-                                anchors.rightMargin: controlGrid.wideTileSidePadding
-                                spacing: controlGrid.wideTileIconGap
-                                NotchWidgets.Network {
-                                    // Control-center icons use the dark variant.
-                                    darkIcon: true
-                                    width: 18
-                                    height: 18
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    rasterScale: 18 / 15
-                                }
-                                Column {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    Text { text: "Wi-Fi"; color: Networking.wifiEnabled ? "#111214" : "white"; font.family: Config.fontFamily; font.pixelSize: Math.round(13 * Config.uiScale); font.weight: 550 }
-                                    Text { text: notch.wifiStatus; color: Networking.wifiEnabled ? "#4b5563" : "#d8f1ff"; font.family: Config.fontFamily; font.pixelSize: Math.round(11 * Config.uiScale) }
-                                }
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                enabled: Networking.wifiHardwareEnabled
-                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                onClicked: Networking.wifiEnabled = !Networking.wifiEnabled
-                            }
-                        }
-
-                        ControlGridCell {
-                            grid: controlGrid
-                            gridColumn: 0
-                            gridRow: 1
-                            columnSpan: 2
-                            radius: height / 2
-                            baseColor: notch.bluetoothAdapter
-                                && (notch.bluetoothAdapter.enabled || notch.bluetoothChanging)
-                                ? controlGrid.activeTileColor
-                                : controlGrid.passiveTileColor
-                            hoverColor: notch.bluetoothAdapter && (notch.bluetoothAdapter.enabled || notch.bluetoothChanging)
-                                ? "#d8dde3" : controlGrid.hoverTileColor
-                            opacity: notch.bluetoothAdapter ? 1 : 0.55
-
-                            Row {
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.verticalCenter: parent.verticalCenter
-                                anchors.leftMargin: controlGrid.wideTileSidePadding
-                                anchors.rightMargin: controlGrid.wideTileSidePadding
-                                spacing: controlGrid.wideTileIconGap
-                                Image {
-                                    width: 18
-                                    height: 18
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    source: Icon.getPath(notch.bluetoothIconName
-                                        + (notch.bluetoothAdapter && (notch.bluetoothAdapter.enabled || notch.bluetoothChanging) ? "_black" : ""))
-                                    sourceSize: Qt.size(18, 18)
-                                    fillMode: Image.PreserveAspectFit
-                                    smooth: true
-                                }
-                                Column {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    Text { text: "Bluetooth"; color: notch.bluetoothAdapter && (notch.bluetoothAdapter.enabled || notch.bluetoothChanging) ? "#111214" : "white"; font.family: Config.fontFamily; font.pixelSize: Math.round(13 * Config.uiScale); font.weight: 550 }
-                                    Text { text: notch.bluetoothStatus; color: notch.bluetoothAdapter && (notch.bluetoothAdapter.enabled || notch.bluetoothChanging) ? "#4b5563" : "#d8f1ff"; font.family: Config.fontFamily; font.pixelSize: Math.round(11 * Config.uiScale) }
-                                }
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                enabled: notch.bluetoothCanToggle
-                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                onClicked: notch.bluetoothAdapter.enabled = !notch.bluetoothAdapter.enabled
-                            }
-                        }
-
-                        ControlGridCell {
-                            grid: controlGrid
-                            gridColumn: 2
-                            gridRow: 0
-                            columnSpan: 2
-                            rowSpan: 2
-                            radius: controlGrid.tileRadius
-                            baseColor: controlGrid.passiveTileColor
-                            hoverColor: controlGrid.hoverTileColor
-                            Text {
-                                anchors.top: parent.top
-                                anchors.left: parent.left
-                                anchors.topMargin: 14
-                                anchors.leftMargin: 14
-                                width: parent.width - 28
-                                text: notch.mediaTitle
-                                color: "white"
-                                elide: Text.ElideRight
-                                font.family: Config.fontFamily
-                                font.pixelSize: Math.round(controlGrid.titleSize * Config.uiScale)
-                                font.weight: 600
-                            }
-                            Row {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                anchors.bottom: parent.bottom
-                                anchors.bottomMargin: 14
-                                spacing: 7
-
-                                MediaControl {
-                                    iconName: "media/previous"
-                                    enabled: notch.mediaPlayer && notch.mediaPlayer.canGoPrevious
-                                    onTriggered: notch.mediaPlayer.previous()
-                                }
-                                MediaControl {
-                                    iconName: notch.mediaPlayer && notch.mediaPlayer.isPlaying
-                                        ? "media/pause" : "media/play"
-                                    enabled: notch.mediaPlayer && notch.mediaPlayer.canTogglePlaying
-                                    active: notch.mediaPlayer && notch.mediaPlayer.isPlaying
-                                    onTriggered: notch.mediaPlayer.togglePlaying()
-                                }
-                                MediaControl {
-                                    iconName: "media/next"
-                                    enabled: notch.mediaPlayer && notch.mediaPlayer.canGoNext
-                                    onTriggered: notch.mediaPlayer.next()
-                                }
-                            }
-                        }
-
-                        ControlGridCell {
-                            grid: controlGrid
-                            gridColumn: 0
-                            gridRow: 2
-                            radius: width / 2
-                            baseColor: notch.doNotDisturb ? "#f6f8fb" : "transparent"
-                            hoverColor: notch.doNotDisturb ? "#d8dde3" : controlGrid.hoverTileColor
-                            Image {
-                                anchors.centerIn: parent
-                                width: Math.round(16 * Config.uiScale)
-                                height: Math.round(16 * Config.uiScale)
-                                source: Icon.getPath(notch.doNotDisturb
-                                    ? "do-not-disturb_black" : "do-not-disturb")
-                                sourceSize: Qt.size(width, height)
-                                fillMode: Image.PreserveAspectFit
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: notch.doNotDisturb = !notch.doNotDisturb
-                            }
-                        }
-
-                        ControlGridCell {
-                            grid: controlGrid
-                            gridColumn: 1
-                            gridRow: 2
-                            radius: width / 2
-                            baseColor: Theme.dark ? "#f6f8fb" : "transparent"
-                            hoverColor: Theme.dark ? "#d8dde3" : controlGrid.hoverTileColor
-                            Image {
-                                anchors.centerIn: parent
-                                width: Math.round(16 * Config.uiScale)
-                                height: Math.round(16 * Config.uiScale)
-                                source: Icon.getPath(Theme.dark ? "theme_black" : "theme")
-                                sourceSize: Qt.size(width, height)
-                                fillMode: Image.PreserveAspectFit
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: Theme.toggle()
-                            }
-                        }
-
-                        ControlGridCell {
-                            grid: controlGrid
-                            gridColumn: 2
-                            gridRow: 2
-                            radius: width / 2
-                            baseColor: notch.notificationCount > 0 ? "#f6f8fb" : controlGrid.passiveTileColor
-                            hoverColor: notch.notificationCount > 0 ? "#d8dde3" : controlGrid.hoverTileColor
-                            Image {
-                                anchors.centerIn: parent
-                                width: Math.round(16 * Config.uiScale)
-                                height: Math.round(16 * Config.uiScale)
-                                source: Icon.getPath(notch.notificationCount > 0 ? "bell_black" : "bell")
-                                sourceSize: Qt.size(width, height)
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: notch.openNotifications()
-                            }
-                        }
-
-                    }
-                }
-            }
+            notchWindow: notch
         }
 
-        Item {
+        NotificationsPanel {
             id: notificationPanel
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.leftMargin: 280
-            anchors.rightMargin: 18
-            anchors.topMargin: 18
-            anchors.bottomMargin: 18
-            height: Math.max(0, parent.height - anchors.topMargin - anchors.bottomMargin)
-            readonly property bool active: notch.menuOpen && notch.launcherMode === "notifications"
-            visible: (notch.menuOpen || notch.menuClosing)
-                && (notch.launcherMode === "control"
-                    || notch.launcherMode === "notifications")
-            enabled: active
-            focus: active
-            opacity: active ? 1 : 0
-            y: active ? anchors.topMargin : parent.height - anchors.topMargin
-            scale: active ? 1 : 0.92
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: 260
-                    easing.type: Easing.OutCubic
-                }
-            }
-            Behavior on y {
-                NumberAnimation {
-                    duration: 260
-                    easing.type: Easing.OutCubic
-                }
-            }
-            Behavior on scale {
-                NumberAnimation {
-                    duration: 260
-                    easing.type: Easing.OutCubic
-                }
-            }
-            Keys.onEscapePressed: notch.openControlCenter()
-
-            ColumnLayout {
-                anchors.fill: parent
-                spacing: 8
-                Text {
-                    Layout.fillWidth: true
-                    text: "Notifications"
-                    color: "#4d7dff"
-                    font.family: Config.fontFamily
-                    font.pixelSize: Math.round(13 * Config.uiScale)
-                    font.weight: 600
-                }
-                ListView {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    clip: true
-                    spacing: 6
-                    model: notch.notifications
-                    delegate: Rectangle {
-                        required property var modelData
-                        width: ListView.view.width
-                        height: 52
-                        radius: 16
-                        color: "#191c21"
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 8
-                            Image { Layout.preferredWidth: 18; Layout.preferredHeight: 18; source: modelData.image || Icon.getPath("bell"); sourceSize: Qt.size(18, 18) }
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 1
-                                Text { Layout.fillWidth: true; text: modelData.appName || modelData.summary || "Notification"; color: "#f4f5f7"; elide: Text.ElideRight; font.family: Config.fontFamily; font.pixelSize: Math.round(12 * Config.uiScale); font.weight: 600 }
-                                Text { Layout.fillWidth: true; text: modelData.body || modelData.summary || ""; color: "#9da4b0"; elide: Text.ElideRight; font.family: Config.fontFamily; font.pixelSize: Math.round(11 * Config.uiScale) }
-                            }
-                            MouseArea { anchors.fill: parent; onClicked: modelData.dismiss() }
-                        }
-                    }
-                    Text { anchors.centerIn: parent; visible: notch.notificationCount === 0; text: "You're all caught up"; color: "#777e8b"; font.family: Config.fontFamily; font.pixelSize: Math.round(13 * Config.uiScale) }
-                }
-            }
+            notchWindow: notch
         }
 
         Item {
@@ -1703,155 +1176,6 @@ PanelWindow {
                 color: "#8e939d"
                 font.family: Config.fontFamily
                 font.pixelSize: Math.round(12 * Config.uiScale)
-            }
-        }
-
-        Item {
-            id: mediaPill
-            readonly property bool active: (notch.mediaPlaying || notch.mediaPaused)
-                && !notch.menuOpen && (!notch.osdActive || notch.osdClosing)
-            anchors {
-                top: parent.top
-                left: parent.left
-                right: parent.right
-                leftMargin: notch.pillContentInset
-                rightMargin: notch.pillContentInset
-            }
-            height: notch.osdHeight
-            visible: active || opacity > 0
-            enabled: active
-            opacity: active ? 1 : 0
-            Behavior on opacity {
-                SpringAnimation {
-                    spring: 11
-                    damping: 0.75
-                    mass: 1.6
-                    epsilon: 0.01
-                }
-            }
-
-            RowLayout {
-                anchors.fill: parent
-                spacing: 8
-
-                Item {
-                    Layout.preferredWidth: 16
-                    Layout.preferredHeight: 16
-
-                    Image {
-                        anchors.fill: parent
-                        source: Icon.getPath("media/playlist")
-                        sourceSize: Qt.size(16, 16)
-                        visible: artwork.status !== Image.Ready
-                        opacity: 0.7
-                    }
-
-                    Image {
-                        id: artwork
-                        anchors.fill: parent
-                        source: notch.mediaArtworkUrl
-                        sourceSize: Qt.size(64, 64)
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        smooth: true
-                        visible: status === Image.Ready
-                    }
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    text: notch.mediaTitle
-                    elide: Text.ElideRight
-                    color: "#f4f5f7"
-                    font.family: Config.fontFamily
-                    font.pixelSize: Math.round(13 * Config.uiScale)
-                    font.weight: Font.Medium
-                    verticalAlignment: Text.AlignVCenter
-                    opacity: mediaHover.hovered ? 1 : 0
-                    Behavior on opacity {
-                        SpringAnimation {
-                            spring: 11
-                            damping: 0.75
-                            mass: 1.6
-                            epsilon: 0.01
-                        }
-                    }
-                }
-
-                Item {
-                    Layout.preferredWidth: 18
-                    Layout.preferredHeight: 16
-
-                    Row {
-                        anchors.centerIn: parent
-                        height: 12
-                        spacing: 2
-                        visible: opacity > 0
-                        opacity: notch.mediaPlaying && !mediaHover.hovered ? 1 : 0
-                        Behavior on opacity {
-                            SpringAnimation {
-                                spring: 11
-                                damping: 0.75
-                                mass: 1.6
-                                epsilon: 0.01
-                            }
-                        }
-                        Repeater {
-                            model: 5
-                            Rectangle {
-                                required property int index
-                                anchors.bottom: parent.bottom
-                                width: 2
-                                height: {
-                                    const steps = notch.mediaBarSteps;
-                                    const frame = steps && steps.length
-                                        ? steps[notch.mediaBarFrame % steps.length] : null;
-                                    return frame ? frame[index] : 4;
-                                }
-                                radius: 1
-                                color: "#f4f5f7"
-                                Behavior on height {
-                                    SpringAnimation {
-                                        spring: 9
-                                        damping: 0.62
-                                        mass: 1.6
-                                        epsilon: 0.01
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Image {
-                        anchors.centerIn: parent
-                        width: 16
-                        height: 16
-                        source: Icon.getPath(notch.mediaPaused ? "media/play" : "media/pause")
-                        sourceSize: Qt.size(16, 16)
-                        fillMode: Image.PreserveAspectFit
-                        visible: opacity > 0
-                        opacity: notch.mediaPaused || (notch.mediaPlaying && mediaHover.hovered) ? 1 : 0
-                        Behavior on opacity {
-                            SpringAnimation {
-                                spring: 11
-                                damping: 0.75
-                                mass: 1.6
-                                epsilon: 0.01
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            enabled: mediaPill.active && !notch.menuClosing && !notch.osdActive
-                && !!notch.mediaPlayer && notch.mediaPlayer.canTogglePlaying
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-                if (notch.mediaPlayer)
-                    notch.mediaPlayer.togglePlaying();
             }
         }
 

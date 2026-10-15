@@ -33,13 +33,12 @@ PanelWindow {
     }
     RightIndicators {
         barWindow: bar
-        notchWindow: notch
         onControlCenterClicked: notch.openControlCenter()
-        onNotificationsClicked: notch.openNotifications()
+        onVolumeClicked: notch.show("volume")
+        onCalendarClicked: notch.openCalendar()
     }
     Notch {
         id: notch
     }
-    // Tray {}
 
 }
