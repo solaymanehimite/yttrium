@@ -50,7 +50,7 @@ Item {
                 leftMargin: 9
                 rightMargin: 9
             }
-            spacing: 7
+            spacing: Config.space7
 
             Item {
                 visible: row.toggleType !== ""

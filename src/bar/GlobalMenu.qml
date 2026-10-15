@@ -397,7 +397,7 @@ Pane {
         x: 15
         anchors.verticalCenter: parent.verticalCenter
         height: globalMenuPane.height
-        spacing: 1
+        spacing: Config.space1
 
         Item {
             id: appButton
@@ -440,8 +440,8 @@ Pane {
                 color: Theme.barText
                 elide: Text.ElideRight
                 font.family: Config.fontFamily
-                font.pixelSize: Math.round(16 * Config.uiScale)
-                font.weight: 650
+                font.pixelSize: Math.round(17 * Config.uiScale)
+                font.weight: 700
             }
 
             MouseArea {

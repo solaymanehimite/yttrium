@@ -17,7 +17,7 @@ RowLayout {
     anchors.rightMargin: 16
     anchors.verticalCenter: parent.verticalCenter
     height: parent.height
-    spacing: 10
+    spacing: Config.space10
 
     LocalSendIndicator {
         hostWindow: indicators.barWindow

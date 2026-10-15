@@ -10,12 +10,12 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: Tokens.controlGap
+        spacing: Config.space8
 
         Text {
             Layout.fillWidth: true
             text: root.heading
-            color: Tokens.accent
+            color: Theme.accent
             font.family: Config.fontFamily
             font.pixelSize: Math.round(13 * Config.uiScale)
             font.weight: 600
@@ -26,7 +26,7 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            spacing: Tokens.compactGap
+            spacing: Config.space6
             model: root.notchWindow.notifications
             boundsBehavior: Flickable.StopAtBounds
 
@@ -35,12 +35,12 @@ Item {
                 width: notificationList.width
                 height: 54
                 radius: 14
-                color: Tokens.panelSurface
+                color: Theme.panelSurface
 
                 RowLayout {
                     anchors.fill: parent
                     anchors.margins: 10
-                    spacing: 8
+                    spacing: Config.space8
 
                     Image {
                         Layout.preferredWidth: 18
@@ -52,12 +52,12 @@ Item {
 
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 1
+                        spacing: Config.space1
 
                         Text {
                             Layout.fillWidth: true
                             text: modelData.appName || modelData.summary || "Notification"
-                            color: Tokens.textPrimary
+                            color: Theme.textPrimary
                             elide: Text.ElideRight
                             font.family: Config.fontFamily
                             font.pixelSize: Math.round(12 * Config.uiScale)
@@ -67,7 +67,7 @@ Item {
                         Text {
                             Layout.fillWidth: true
                             text: modelData.body || modelData.summary || ""
-                            color: Tokens.textMuted
+                            color: Theme.textMuted
                             elide: Text.ElideRight
                             font.family: Config.fontFamily
                             font.pixelSize: Math.round(11 * Config.uiScale)

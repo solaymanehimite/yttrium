@@ -9,7 +9,7 @@ Item {
     property real rasterScale: 1.0
     readonly property real percentage: Services.PowerBattery.percentage
     readonly property bool batteryAvailable: Services.PowerBattery.available
-    readonly property color backgroundColor: "#707070"
+    readonly property color backgroundColor: Services.Theme.batteryTrack
     readonly property color fillColor: Services.Theme.barText
     readonly property color pinColor: Services.PowerBattery.fullyCharged ? fillColor : backgroundColor
 

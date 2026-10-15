@@ -16,14 +16,14 @@ Item {
     RowLayout {
         id: clockRow
         anchors.fill: parent
-        spacing: 8
+        spacing: Config.space8
 
         TextMetrics {
             id: clockWidth
             text: "00:00"
             font.family: Config.fontFamily
-            font.pixelSize: Math.round(14 * Config.uiScale)
-            font.weight: Font.Medium
+            font.pixelSize: Math.round(15 * Config.uiScale)
+            font.weight: 550
             font.features: { "tnum": 1 }
         }
 
@@ -35,8 +35,8 @@ Item {
             text: Time.time
             color: Theme.barText
             font.family: Config.fontFamily
-            font.pixelSize: Math.round(14 * Config.uiScale)
-            font.weight: Font.Medium
+            font.pixelSize: Math.round(15 * Config.uiScale)
+            font.weight: 550
             font.features: { "tnum": 1 }
         }
 
@@ -45,8 +45,8 @@ Item {
             text: Time.date
             color: Theme.barText
             font.family: Config.fontFamily
-            font.pixelSize: Math.round(14 * Config.uiScale)
-            font.weight: Font.Medium
+            font.pixelSize: Math.round(15 * Config.uiScale)
+            font.weight: 550
         }
     }
 

@@ -16,7 +16,7 @@ Item {
         && notchWindow.launcherMode === "calendar"
 
     anchors.fill: parent
-    anchors.margins: Tokens.panelInset
+    anchors.margins: Config.space18
     visible: active || opacity > 0
     enabled: active
     focus: active
@@ -44,19 +44,19 @@ Item {
 
     RowLayout {
         anchors.fill: parent
-        spacing: 28
+        spacing: Config.space28
 
         ColumnLayout {
             Layout.preferredWidth: 210
             Layout.fillHeight: true
-            spacing: 8
+            spacing: Config.space8
 
             Text {
                 Layout.fillWidth: true
                 text: Qt.formatDate(
                     new Date(Time.year, Time.month, 1), "MMMM yyyy")
                     .toUpperCase()
-                color: Tokens.accent
+                color: Theme.accent
                 leftPadding: 5
                 bottomPadding: 5
                 font.family: Config.fontFamily
@@ -65,14 +65,14 @@ Item {
             }
 
             Row {
-                spacing: 8
+                spacing: Config.space8
                 Repeater {
                     model: ["M", "T", "W", "T", "F", "S", "S"]
                     Text {
                         required property string modelData
                         width: 24
                         text: modelData
-                        color: Tokens.textMuted
+                        color: Theme.textMuted
                         font.family: Config.fontFamily
                         font.pixelSize: Math.round(12 * Config.uiScale)
                         horizontalAlignment: Text.AlignHCenter
@@ -95,7 +95,7 @@ Item {
                         visible: day > 0 && day <= root.calendarDays
                         text: visible ? day : ""
                         color: day === Time.day
-                            ? Tokens.notchBlack : Tokens.textMuted
+                            ? Theme.notchBlack : Theme.textMuted
                         font.family: Config.fontFamily
                         font.pixelSize: Math.round(13 * Config.uiScale)
                         horizontalAlignment: Text.AlignHCenter
@@ -107,7 +107,7 @@ Item {
                             width: 26
                             height: 26
                             radius: width / 2
-                            color: Tokens.accent
+                            color: Theme.accent
                             z: -1
                         }
                     }
@@ -120,12 +120,12 @@ Item {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 10
+            spacing: Config.space10
 
             Text {
                 Layout.fillWidth: true
                 text: "Today's events"
-                color: Tokens.textPrimary
+                color: Theme.textPrimary
                 font.family: Config.fontFamily
                 font.pixelSize: Math.round(16 * Config.uiScale)
                 font.weight: 600
@@ -134,7 +134,7 @@ Item {
             Text {
                 Layout.fillWidth: true
                 text: Qt.formatDate(new Date(), "dddd, MMMM d")
-                color: Tokens.textMuted
+                color: Theme.textMuted
                 font.family: Config.fontFamily
                 font.pixelSize: Math.round(12 * Config.uiScale)
             }
@@ -145,30 +145,30 @@ Item {
                 Layout.fillHeight: true
                 visible: root.eventsAvailable && root.events.length > 0
                 model: root.events
-                spacing: Tokens.compactGap
+                spacing: Config.space6
                 clip: true
 
                 delegate: Rectangle {
                     required property var modelData
                     width: eventList.width
                     height: 48
-                    radius: Tokens.tileRadius
-                    color: Tokens.panelSurface
+                    radius: Config.tileRadius
+                    color: Theme.panelSurface
 
                     Column {
                         anchors.fill: parent
                         anchors.margins: 10
-                        spacing: 1
+                        spacing: Config.space1
                         Text {
                             text: modelData.title || "Untitled event"
-                            color: Tokens.textPrimary
+                            color: Theme.textPrimary
                             font.family: Config.fontFamily
                             font.pixelSize: Math.round(12 * Config.uiScale)
                             font.weight: 600
                         }
                         Text {
                             text: modelData.time || "All day"
-                            color: Tokens.textMuted
+                            color: Theme.textMuted
                             font.family: Config.fontFamily
                             font.pixelSize: Math.round(11 * Config.uiScale)
                         }

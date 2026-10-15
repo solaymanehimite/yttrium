@@ -29,6 +29,7 @@ Singleton {
 
     readonly property color barText: dark ? "#f4f5f7" : "#111827"
     readonly property color barMutedText: dark ? "#aeb8c4" : "#4b5563"
+    readonly property color activeMutedText: "#4b5563"
     readonly property string topBarIconSuffix: dark ? "" : "_black"
     readonly property color barHover: dark ? "#1a4d7dff" : "#263b82f6"
     readonly property color barSelected: dark ? "#24527dff" : "#303b82f6"
@@ -42,6 +43,26 @@ Singleton {
     readonly property color menuDisabledText: dark ? "#71808e" : "#9aa5b1"
     readonly property color menuHover: dark ? "#263c4c" : "#dce9f8"
     readonly property color menuCheck: dark ? "#e6f0f8" : "#1f2937"
+
+    // Shared semantic palette for the bar, notch, and panels.
+    readonly property color notchBlack: "#000000"
+    readonly property color panelSurface: "#191c21"
+    readonly property color panelSurfaceRaised: "#20242b"
+    readonly property color tileActive: "#f6f8fb"
+    readonly property color tileHover: "#1c2026"
+    readonly property color textPrimary: "#f4f5f7"
+    readonly property color textMuted: "#9da4b0"
+    readonly property color textQuiet: "#777e8b"
+    readonly property color textOnDark: "#ffffff"
+    readonly property color accent: "#4d7dff"
+    readonly property color danger: "#ff6b72"
+    readonly property color tileBorder: "#242831"
+    readonly property color osdTrack: "#3a3a3a"
+    readonly property color selection: "#557aa7"
+    readonly property color batteryTrack: "#707070"
+    readonly property color notchGradientTop: "#ff000000"
+    readonly property color notchGradientMid: "#f2000000"
+    readonly property color notchGradientBottom: "#e6000000"
 
     function toggle() {
         dark = !dark;

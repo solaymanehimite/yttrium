@@ -14,6 +14,7 @@ PanelWindow {
     readonly property int menuWidth: Math.round(280 * Config.uiScale)
     readonly property int rowHeight: Math.round(36 * Config.uiScale)
     property real menuX: 8
+    property real menuY: 0
 
     screen: hostWindow ? hostWindow.screen : null
     visible: controller.menuOpen
@@ -48,8 +49,10 @@ PanelWindow {
             return;
         const point = menu.anchorItem.mapToGlobal(0, 0);
         const screenX = screen ? screen.x : 0;
+        const screenY = screen ? screen.y : 0;
         menuX = Math.max(8, Math.min(hostWindow.width - menuWidth - 8,
-            point.x - screenX - menuWidth + anchorItem.width));
+            point.x - screenX - menuWidth + anchorItem.width + 10));
+        menuY = point.y - screenY + anchorItem.height + 12;
     }
 
     onVisibleChanged: {
@@ -81,7 +84,7 @@ PanelWindow {
 
     Rectangle {
         id: menuBox
-        y: 34
+        y: menu.menuY
         property real contentHeight: 0
         x: menu.menuX
         width: menu.menuWidth
@@ -115,7 +118,7 @@ PanelWindow {
                 fill: parent
                 margins: 6
             }
-            spacing: 2
+            spacing: Config.space2
 
             Item {
                 width: parent.width
@@ -175,7 +178,7 @@ PanelWindow {
                     text: controller.discovering
                         ? "Looking for devices…"
                         : (controller.error || "No devices found")
-                    color: controller.error ? "#c43d4b" : Theme.menuMutedText
+                    color: controller.error ? Theme.danger : Theme.menuMutedText
                     font.family: Config.fontFamily
                     font.pixelSize: Math.round(13 * Config.uiScale)
                 }

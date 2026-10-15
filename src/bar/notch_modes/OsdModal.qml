@@ -24,7 +24,7 @@ RowLayout {
         }
     }
 
-    spacing: 10
+    spacing: Config.space10
 
     function clamped(v) {
         if (isNaN(v) || v === undefined || v === null)
@@ -58,13 +58,13 @@ RowLayout {
         layer.enabled: true
         layer.effect: MultiEffect {
             colorization: 1
-            colorizationColor: "#ffffff"
+            colorizationColor: Theme.textOnDark
         }
     }
 
     Text {
         text: root.title
-        color: "#ffffff"
+        color: Theme.textOnDark
         Layout.alignment: Qt.AlignVCenter
         font.family: Config.fontFamily
         font.pixelSize: Math.round(14 * Config.uiScale)
@@ -82,7 +82,7 @@ RowLayout {
         Layout.preferredWidth: 80
         Layout.preferredHeight: 5
         radius: 2.5
-        color: "#3a3a3a"
+        color: Theme.osdTrack
 
         Rectangle {
             id: fill
@@ -91,7 +91,7 @@ RowLayout {
             width: Math.round(track.width * root.smoothValue)
             height: parent.height
             radius: 2.5
-            color: "#ffffff"
+            color: Theme.textOnDark
         }
     }
 }

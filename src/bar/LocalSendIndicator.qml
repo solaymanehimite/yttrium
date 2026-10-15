@@ -272,7 +272,7 @@ Item {
         width: Math.max(14, badgeText.implicitWidth + 8)
         height: Math.round(14 * Config.uiScale)
         radius: Math.round(7 * Config.uiScale)
-        color: "#4d7dff"
+        color: Theme.accent
 
         Text {
             id: badgeText

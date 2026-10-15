@@ -96,9 +96,9 @@ PanelWindow {
                 y1: 0
                 x2: 0
                 y2: Math.max(1, notchSurface.height)
-                GradientStop { position: 0.0; color: "#ff000000" }
-                GradientStop { position: 0.72; color: "#f2000000" }
-                GradientStop { position: 1.0; color: "#e6000000" }
+                GradientStop { position: 0.0; color: Theme.notchGradientTop }
+                GradientStop { position: 0.72; color: Theme.notchGradientMid }
+                GradientStop { position: 1.0; color: Theme.notchGradientBottom }
             }
             startX: 0
             startY: 0
@@ -144,7 +144,7 @@ PanelWindow {
         RowLayout {
             anchors.fill: parent
             visible: mode === "notification"
-            spacing: 8
+            spacing: Config.space8
 
             Image {
                 Layout.preferredWidth: 16
@@ -155,11 +155,11 @@ PanelWindow {
             }
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 0
+                spacing: Config.space0
                 Text {
                     Layout.fillWidth: true
                     text: notch.notificationTitle
-                    color: "#ffffff"
+                    color: Theme.textOnDark
                     elide: Text.ElideRight
                     font.family: Config.fontFamily
                     font.pixelSize: Math.round(13 * Config.uiScale)
@@ -300,7 +300,7 @@ PanelWindow {
     readonly property int osdContentInset: 18
     readonly property int pillShoulderSize: 12
     readonly property int menuCornerRadius: wideMenuMode
-        ? Tokens.menuRadius
+        ? Config.menuRadius
         : (launcherMode === "wallpapers" ? 34 : 24)
     property real animatedMenuRadius: menuCornerRadius
     Behavior on animatedMenuRadius {
@@ -784,9 +784,9 @@ PanelWindow {
         color: "transparent"
         border.width: 0
         gradient: Gradient {
-            GradientStop { position: 0.0; color: "#ff000000" }
-            GradientStop { position: 0.72; color: "#f2000000" }
-            GradientStop { position: 1.0; color: "#e6000000" }
+            GradientStop { position: 0.0; color: Theme.notchGradientTop }
+            GradientStop { position: 0.72; color: Theme.notchGradientMid }
+            GradientStop { position: 1.0; color: Theme.notchGradientBottom }
         }
         clip: true
         opacity: 1
@@ -849,7 +849,7 @@ PanelWindow {
                 rightMargin: 12
                 topMargin: 10
             }
-            spacing: 4
+            spacing: Config.space4
 
             TextInput {
                 id: searchInput
@@ -858,8 +858,8 @@ PanelWindow {
                 leftPadding: 34
                 rightPadding: 12
                 text: notch.searchQuery
-                color: "#f4f5f7"
-                selectionColor: "#557aa7"
+                color: Theme.textPrimary
+                selectionColor: Theme.selection
                 clip: true
                 focus: launcher.active
                 font.family: Config.fontFamily
@@ -905,7 +905,7 @@ PanelWindow {
                     anchors.leftMargin: 34
                     anchors.verticalCenter: parent.verticalCenter
                     text: "Search applications"
-                    color: "#777e8b"
+                    color: Theme.textQuiet
                     visible: !searchInput.text
                     font: searchInput.font
                 }
@@ -932,14 +932,14 @@ PanelWindow {
                             // Keep the highlight concentric with the inset menu edge.
                             radius: Math.min(height / 2, notch.menuCornerRadius - 12)
                             color: index === notch.selectedIndex || activeFocus
-                                ? "#263b82f6"
-                                : (launcherMouse.containsMouse ? "#263b82f6" : "transparent")
+                                ? Theme.barHover
+                                : (launcherMouse.containsMouse ? Theme.barHover : "transparent")
 
                     Row {
                         anchors.fill: parent
                         anchors.leftMargin: 8
                         anchors.rightMargin: 8
-                        spacing: 10
+                        spacing: Config.space10
 
                         Image {
                             anchors.verticalCenter: parent.verticalCenter
@@ -955,7 +955,7 @@ PanelWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             width: modelData.isActionPrefix ? parent.width - 52 : parent.width - 30
                             text: String(modelData.name || modelData.id)
-                            color: "#f4f5f7"
+                            color: Theme.textPrimary
                             elide: Text.ElideRight
                             font.family: Config.fontFamily
                             font.pixelSize: Math.round(15 * Config.uiScale)
@@ -965,7 +965,7 @@ PanelWindow {
                             visible: !!modelData.isActionPrefix
                             anchors.verticalCenter: parent.verticalCenter
                             text: ">"
-                            color: "#777e8b"
+                            color: Theme.textQuiet
                             font.family: Config.fontFamily
                             font.pixelSize: Math.round(14 * Config.uiScale)
                         }
@@ -1075,7 +1075,7 @@ PanelWindow {
                 anchors.top: parent.top
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Wallpapers"
-                color: "#8e939d"
+                color: Theme.textMuted
                 font.family: Config.fontFamily
                 font.pixelSize: Math.round(13 * Config.uiScale)
                 font.weight: 600
@@ -1141,7 +1141,7 @@ PanelWindow {
                         height: 130
                         anchors.centerIn: parent
                         radius: 12
-                        color: "#202329"
+                        color: Theme.panelSurfaceRaised
                         clip: true
 
                         Image {
@@ -1173,7 +1173,7 @@ PanelWindow {
                 text: notch.wallpapers.length > 0
                     ? (notch.wallpaperIndex + 1) + " / " + notch.wallpapers.length
                     : "No wallpapers found"
-                color: "#8e939d"
+                color: Theme.textMuted
                 font.family: Config.fontFamily
                 font.pixelSize: Math.round(12 * Config.uiScale)
             }

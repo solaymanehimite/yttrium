@@ -21,13 +21,13 @@ Item {
 
     Behavior on opacity {
         NumberAnimation {
-            duration: Tokens.panelAnimation
+            duration: Config.menuAnimation
             easing.type: Easing.OutCubic
         }
     }
     Behavior on scale {
         NumberAnimation {
-            duration: Tokens.panelAnimation
+            duration: Config.menuAnimation
             easing.type: Easing.OutCubic
         }
     }

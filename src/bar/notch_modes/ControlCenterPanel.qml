@@ -41,22 +41,22 @@ Item {
 
         property bool activeState: false
         property bool clickable: true
-        property string hoverColor: Tokens.tileHover
+        property string hoverColor: Theme.tileHover
         signal activated()
         default property alias content: tileContent.data
 
-        radius: Tokens.tileRadius
+        radius: Config.tileRadius
         color: tileHover.hovered
             ? hoverColor
-            : (activeState ? Tokens.tileActive : "transparent")
+            : (activeState ? Theme.tileActive : "transparent")
         border.width: activeState ? 0 : 1
-        border.color: activeState ? "transparent" : "#242831"
+        border.color: activeState ? "transparent" : Theme.tileBorder
 
         RowLayout {
             id: tileContent
             anchors.fill: parent
             anchors.margins: 12
-            spacing: 10
+            spacing: Config.space10
         }
 
         HoverHandler {
@@ -109,7 +109,7 @@ Item {
 
     RowLayout {
         anchors.fill: parent
-        spacing: 14
+        spacing: Config.space14
 
         NotificationList {
             Layout.preferredWidth: 218
@@ -121,7 +121,7 @@ Item {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: Tokens.compactGap
+            spacing: Config.space6
 
             ControlTile {
                 id: wifiTile
@@ -141,12 +141,12 @@ Item {
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 1
+                    spacing: Config.space1
                     Text {
                         Layout.fillWidth: true
                         text: "Wi-Fi"
                         color: wifiTile.activeState
-                            ? Tokens.notchBlack : Tokens.textPrimary
+                            ? Theme.notchBlack : Theme.textPrimary
                         font.family: Config.fontFamily
                         font.pixelSize: Math.round(12 * Config.uiScale)
                         font.weight: 600
@@ -155,7 +155,7 @@ Item {
                         Layout.fillWidth: true
                         text: root.notchWindow.wifiStatus
                         color: wifiTile.activeState
-                            ? "#4b5563" : Tokens.textMuted
+                            ? Theme.activeMutedText : Theme.textMuted
                         font.family: Config.fontFamily
                         font.pixelSize: Math.round(11 * Config.uiScale)
                     }
@@ -188,12 +188,12 @@ Item {
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 1
+                    spacing: Config.space1
                     Text {
                         Layout.fillWidth: true
                         text: "Bluetooth"
                         color: bluetoothTile.activeState
-                            ? Tokens.notchBlack : Tokens.textPrimary
+                            ? Theme.notchBlack : Theme.textPrimary
                         font.family: Config.fontFamily
                         font.pixelSize: Math.round(12 * Config.uiScale)
                         font.weight: 600
@@ -202,7 +202,7 @@ Item {
                         Layout.fillWidth: true
                         text: root.notchWindow.bluetoothStatus
                         color: bluetoothTile.activeState
-                            ? "#4b5563" : Tokens.textMuted
+                            ? Theme.activeMutedText : Theme.textMuted
                         font.family: Config.fontFamily
                         font.pixelSize: Math.round(11 * Config.uiScale)
                     }
@@ -217,7 +217,7 @@ Item {
                 Text {
                     Layout.fillWidth: true
                     text: root.notchWindow.mediaTitle
-                    color: Tokens.textPrimary
+                    color: Theme.textPrimary
                     elide: Text.ElideRight
                     font.family: Config.fontFamily
                     font.pixelSize: Math.round(12 * Config.uiScale)
@@ -227,7 +227,7 @@ Item {
                 RowLayout {
                     Layout.preferredWidth: 94
                     Layout.fillHeight: true
-                    spacing: 4
+                    spacing: Config.space4
 
                     MediaButton {
                         iconName: "media/previous"
@@ -257,7 +257,7 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: Tokens.compactGap
+                spacing: Config.space6
 
                 ControlTile {
                     id: dndTile
@@ -279,7 +279,7 @@ Item {
                         text: root.notchWindow.doNotDisturbError
                             ? "Unavailable" : "Do not disturb"
                         color: dndTile.activeState
-                            ? Tokens.notchBlack : Tokens.textPrimary
+                            ? Theme.notchBlack : Theme.textPrimary
                         elide: Text.ElideRight
                         font.family: Config.fontFamily
                         font.pixelSize: Math.round(11 * Config.uiScale)
@@ -304,7 +304,7 @@ Item {
                         Layout.fillWidth: true
                         text: Theme.dark ? "Dark" : "Light"
                         color: themeTile.activeState
-                            ? Tokens.notchBlack : Tokens.textPrimary
+                            ? Theme.notchBlack : Theme.textPrimary
                         font.family: Config.fontFamily
                         font.pixelSize: Math.round(11 * Config.uiScale)
                     }

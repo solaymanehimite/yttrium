@@ -14,12 +14,12 @@ Item {
         id: messageColumn
         anchors.left: parent.left
         anchors.right: parent.right
-        spacing: 3
+        spacing: Config.space3
 
         Text {
             Layout.fillWidth: true
             text: root.title
-            color: Tokens.textMuted
+            color: Theme.textMuted
             font.family: Config.fontFamily
             font.pixelSize: Math.round(13 * Config.uiScale)
             font.weight: 600
@@ -28,7 +28,7 @@ Item {
         Text {
             Layout.fillWidth: true
             text: root.detail
-            color: Tokens.textQuiet
+            color: Theme.textQuiet
             wrapMode: Text.WordWrap
             font.family: Config.fontFamily
             font.pixelSize: Math.round(11 * Config.uiScale)
