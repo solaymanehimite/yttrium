@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Effects
+import Quickshell.Io
 import Quickshell.Bluetooth
 import Quickshell.Networking
 import Quickshell.Services.Mpris
@@ -48,8 +49,10 @@ Item {
         ? String(mediaPlayer.trackArtist) : ""
     readonly property string mediaArtwork: mediaPlayer && mediaPlayer.trackArtUrl
         ? String(mediaPlayer.trackArtUrl) : ""
-    readonly property int controlContentWidth: 178
+    readonly property int controlContentWidth: 208
     readonly property int controlContentHeight: 178
+    property string powerProfile: "balanced"
+    readonly property bool nightLightOn: wlsunsetProcess.running
 
     Behavior on opacity {
         NumberAnimation { duration: Config.standardAnimation; easing.type: Easing.OutCubic }
@@ -117,9 +120,13 @@ Item {
         required property string iconSource
         property bool activeState: false
         property bool available: true
+        property int gridSpan: 1
+        property string label: ""
         signal activated()
 
-        Layout.preferredWidth: 54
+        Layout.columnSpan: gridSpan
+        Layout.fillWidth: true
+        Layout.preferredWidth: 64
         Layout.preferredHeight: 54
         radius: activeState ? 16 : Math.min(width, height) / 2
         color: "transparent"
@@ -165,7 +172,8 @@ Item {
         }
 
         Image {
-            anchors.centerIn: parent
+            x: gridSpan === 2 ? 17 : (parent.width - width) / 2
+            anchors.verticalCenter: parent.verticalCenter
             width: 20
             height: 20
             source: iconSource
@@ -177,6 +185,23 @@ Item {
                 colorization: 1
                 colorizationColor: Theme.controlTileActiveText
             }
+        }
+
+        Text {
+            visible: gridSpan === 2 && label.length > 0
+            anchors {
+                left: parent.left
+                leftMargin: 48
+                right: parent.right
+                rightMargin: 8
+                verticalCenter: parent.verticalCenter
+            }
+            text: label
+            color: activeState ? Theme.controlTileActiveText : Theme.textPrimary
+            elide: Text.ElideRight
+            font.family: Config.fontFamily
+            font.pixelSize: Math.round(11 * Config.uiScale)
+            font.weight: 600
         }
 
         MouseArea {
@@ -212,46 +237,85 @@ Item {
         }
     }
 
+    Process {
+        id: powerProfileRead
+        command: ["powerprofilesctl", "get"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: root.powerProfile = text.trim()
+        }
+    }
+
+    Process {
+        id: powerProfileSet
+        onExited: powerProfileRead.running = true
+    }
+
+    Process {
+        id: wlsunsetProcess
+        command: ["wlsunset"]
+    }
+
     function themedIcon(name, active) {
         return Icon.getPath(name);
+    }
+
+    function cyclePowerProfile() {
+        const profiles = ["balanced", "power-saver"];
+        const current = profiles.indexOf(root.powerProfile);
+        const next = profiles[(current + 1 + profiles.length) % profiles.length];
+        powerProfileSet.command = ["powerprofilesctl", "set", next];
+        powerProfileSet.running = true;
+    }
+
+    function toggleNightLight() {
+        wlsunsetProcess.running = !wlsunsetProcess.running;
     }
 
     function tileIcon(index) {
         if (index === 0)
             return themedIcon(NetworkService.connectedNetwork ? "wifi/full" : "wifi/none", tileActive(index));
         if (index === 1)
+            return themedIcon("power-profile", tileActive(index));
+        if (index === 2)
             return themedIcon(bluetoothAdapter && bluetoothAdapter.enabled
                 ? "bluetooth/on" : "bluetooth/off", tileActive(index));
-        if (index === 2)
-            return themedIcon("do-not-disturb", tileActive(index));
         if (index === 3)
-            return themedIcon("theme", tileActive(index));
+            return themedIcon(Audio.microphoneMuted ? "microphone-muted" : "microphone", tileActive(index));
         if (index === 4)
-            return themedIcon(Audio.muted ? "volume/volume_muted" : "volume/volume_high", tileActive(index));
+            return themedIcon("do-not-disturb", tileActive(index));
         if (index === 5)
-            return Icon.getPath("sun");
-        if (index === 6)
-            return themedIcon("wallpaper", false);
-        if (index === 7)
-            return Icon.getPath(mediaPlayer && mediaPlayer.isPlaying ? "media/pause" : "media/play");
-        return themedIcon("settings", false);
+            return themedIcon("theme", tileActive(index));
+        return themedIcon("night-light", tileActive(index));
+    }
+
+    function tileLabel(index) {
+        if (index === 0) {
+            if (!Networking.wifiEnabled)
+                return "Off";
+            const network = NetworkService.connectedNetwork;
+            return network ? String(network.ssid || network.name || "Connected") : "Connected";
+        }
+        if (index === 2)
+            return bluetoothAdapter && bluetoothAdapter.enabled ? "On" : "Off";
+        return "";
     }
 
     function tileActive(index) {
         if (index === 0)
             return Networking.wifiEnabled;
         if (index === 1)
-            return bluetoothAdapter && bluetoothAdapter.enabled;
+            return root.powerProfile === "power-saver";
         if (index === 2)
-            return notchWindow.doNotDisturb;
+            return bluetoothAdapter && bluetoothAdapter.enabled;
         if (index === 3)
-            return Theme.dark;
+            return !Audio.microphoneMuted;
         if (index === 4)
-            return !Audio.muted;
+            return notchWindow.doNotDisturb;
         if (index === 5)
-            return Brightness.brightness > 0.5;
-        if (index === 7)
-            return mediaPlayer && mediaPlayer.isPlaying;
+            return Theme.dark;
+        if (index === 6)
+            return root.nightLightOn;
         return false;
     }
 
@@ -260,21 +324,18 @@ Item {
             if (Networking.wifiHardwareEnabled)
                 Networking.wifiEnabled = !Networking.wifiEnabled;
         } else if (index === 1) {
+            root.cyclePowerProfile();
+        } else if (index === 2) {
             if (bluetoothCanToggle)
                 bluetoothAdapter.enabled = !bluetoothAdapter.enabled;
-        } else if (index === 2) {
-            notchWindow.doNotDisturb = !notchWindow.doNotDisturb;
         } else if (index === 3) {
-            Theme.toggle();
+            Audio.toggleMicrophone();
         } else if (index === 4) {
-            Audio.setVolume(Audio.muted ? Audio.volume : 0);
+            notchWindow.doNotDisturb = !notchWindow.doNotDisturb;
         } else if (index === 5) {
-            notchWindow.show("brightness");
+            Theme.toggle();
         } else if (index === 6) {
-            notchWindow.openWallpaperMode();
-        } else if (index === 7 && mediaPlayer
-                && mediaPlayer.canTogglePlaying) {
-            mediaPlayer.togglePlaying();
+            root.toggleNightLight();
         }
     }
 
@@ -301,13 +362,15 @@ Item {
                 rowSpacing: Config.space8
 
                 Repeater {
-                    model: 9
+                    model: 7
                     delegate: QuickTile {
                         required property int index
+                        gridSpan: index === 0 || index === 2 ? 2 : 1
+                        label: root.tileLabel(index)
                         iconSource: root.tileIcon(index)
                         activeState: root.tileActive(index)
                         available: index !== 0
-                            ? (index !== 1 || root.bluetoothAdapter !== null)
+                            ? (index !== 2 || root.bluetoothAdapter !== null)
                             : Networking.wifiHardwareEnabled
                         onActivated: root.activateTile(index)
                     }

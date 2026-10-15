@@ -6,7 +6,11 @@ import QtQuick
 
 Singleton {
     PwObjectTracker {
-        objects: [Pipewire.defaultAudioSink]
+        objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource]
+    }
+
+    readonly property bool microphoneMuted: {
+        Pipewire.defaultAudioSource?.audio.muted ?? false;
     }
 
     readonly property real volume: {
@@ -15,6 +19,14 @@ Singleton {
 
     readonly property bool muted: {
         Pipewire.defaultAudioSink?.audio.muted ?? false;
+    }
+
+    function toggleMicrophone() {
+        const source = Pipewire.defaultAudioSource;
+        if (!source || !source.ready || !source.audio)
+            return false;
+        source.audio.muted = !source.audio.muted;
+        return source.audio.muted;
     }
 
     function setVolume(value) {

@@ -128,7 +128,7 @@ PanelWindow {
     property int wallpaperIndex: 0
     property bool modeTransitioning: false
     readonly property int menuWidth: Math.round((launcherMode === "wallpapers"
-        ? 640 : (launcherMode === "control" ? 380 : 420)) * Config.uiScale)
+        ? 640 : (launcherMode === "control" ? 435 : 420)) * Config.uiScale)
     readonly property bool actionSearch: notch.searchQuery.startsWith(">")
     readonly property bool calculatorActive: Calculator.active
         && Calculator.query === notch.searchQuery.trim()
