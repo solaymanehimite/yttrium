@@ -27,6 +27,7 @@ RowLayout {
         property bool moved: false
         property real pressGlobalX: 0
         property real pressVolume: 0
+        property real animatedWidth: collapsedWidth
         readonly property int collapsedWidth: 28
         readonly property int expandedWidth: 84
         readonly property int iconSlotWidth: 34
@@ -40,12 +41,13 @@ RowLayout {
             return "volume/volume_high";
         }
 
-        width: collapsedWidth
+        width: animatedWidth
         height: 28
-        Layout.preferredWidth: dragging ? expandedWidth : collapsedWidth
+        Layout.preferredWidth: animatedWidth
         Layout.preferredHeight: 28
         Layout.alignment: Qt.AlignVCenter
-        Behavior on Layout.preferredWidth {
+        onDraggingChanged: animatedWidth = dragging ? expandedWidth : collapsedWidth
+        Behavior on animatedWidth {
             NumberAnimation {
                 duration: 180
                 easing.type: Easing.OutCubic
@@ -69,7 +71,7 @@ RowLayout {
             transform: Scale {
                 origin.x: sliderVisual.width / 2
                 origin.y: sliderVisual.height / 2
-                yScale: volumeControl.dragging ? 0.84 : 1
+                yScale: 1
             }
             Behavior on x {
                 NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
