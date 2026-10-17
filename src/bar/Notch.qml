@@ -127,8 +127,8 @@ PanelWindow {
     property int selectedIndex: 0
     property int wallpaperIndex: 0
     property bool modeTransitioning: false
-    readonly property int menuWidth: Math.round((launcherMode === "wallpapers"
-        ? 640 : (launcherMode === "control" ? 435 : 420)) * Config.uiScale)
+    readonly property int menuWidth: Math.round(
+        (launcherMode === "wallpapers" ? 640 : 420) * Config.uiScale)
     readonly property bool actionSearch: notch.searchQuery.startsWith(">")
     readonly property bool calculatorActive: Calculator.active
         && Calculator.query === notch.searchQuery.trim()
@@ -144,9 +144,6 @@ PanelWindow {
         if (query.startsWith(">")) {
             const actionQuery = query.slice(1).trim();
             const actions = [{
-                name: "Control center",
-                isControlAction: true
-            }, {
                 name: "Wallpapers",
                 isWallpaperAction: true
             }, {
@@ -173,7 +170,7 @@ PanelWindow {
     readonly property int pillShoulderSize: 12
     readonly property int osdCornerRadius: 12
     readonly property int menuCornerRadius: launcherMode === "wallpapers"
-        ? 34 : (launcherMode === "control" ? 28 : 24)
+        ? 34 : 24
     property real animatedMenuRadius: menuCornerRadius
     Behavior on animatedMenuRadius {
         SpringAnimation {
@@ -186,9 +183,8 @@ PanelWindow {
     readonly property int menuHeight: Math.round(
         (launcherMode === "wallpapers"
             ? 250
-            : (launcherMode === "control" ? 198
-                : Math.max(90, Math.min(360,
-                    54 + Math.max(1, launcherEntries.length) * 36))))
+            : Math.max(90, Math.min(360,
+                54 + Math.max(1, launcherEntries.length) * 36)))
         * Config.uiScale)
     property string osdMode: ""
     property bool displaying: false
@@ -209,8 +205,6 @@ PanelWindow {
     function launcherIcon(entry) {
         if (entry.isCalculatorResult)
             return Icon.getPath("calculator");
-        if (entry.isControlAction)
-            return Icon.getPath("control-center");
         if (entry.isWallpaperAction)
             return Icon.getPath("wallpaper");
         if (entry.isThemeAction)
@@ -230,9 +224,7 @@ PanelWindow {
             }
             return;
         }
-        if (entry.isControlAction) {
-            notch.openControlCenter();
-        } else if (entry.isThemeAction) {
+        if (entry.isThemeAction) {
             Theme.toggle();
             notch.toggleMenu();
         } else if (entry.isActionPrefix)
@@ -249,8 +241,6 @@ PanelWindow {
     readonly property bool osdActive: osdMode !== ""
     property bool ready: false
     property bool suppressExternalOsd: false
-    property bool doNotDisturb: false
-    property string doNotDisturbError: ""
     Component.onCompleted: refreshWallpapers()
 
     function toggleMenu() {
@@ -362,22 +352,6 @@ PanelWindow {
         selectedIndex = 0;
     }
 
-    function openControlCenter() {
-        if (!menuOpen) {
-            hideTimer.stop();
-            exitTimer.stop();
-            osdMode = "";
-            displaying = false;
-            menuClosing = false;
-            menuOpening = true;
-            menuOpen = true;
-        }
-        modeTransitioning = true;
-        launcherMode = "control";
-        modeAnimationTimer.restart();
-        Qt.callLater(function() { controlPanel.forceActiveFocus(); });
-    }
-
     function wallpaperAt(offset) {
         if (wallpapers.length === 0)
             return "";
@@ -411,23 +385,6 @@ PanelWindow {
 
     Process {
         id: wallpaperApply
-    }
-
-    Process {
-        id: dndProcess
-        onExited: function(exitCode) {
-            doNotDisturbError = exitCode === 0
-                ? "" : "Do not disturb is unavailable";
-        }
-    }
-
-    onDoNotDisturbChanged: {
-        doNotDisturbError = "";
-        if (!dndProcess.running) {
-            dndProcess.command = ["makoctl", "mode",
-                doNotDisturb ? "-a" : "-r", "do-not-disturb"];
-            dndProcess.running = true;
-        }
     }
 
     Timer {
@@ -591,7 +548,7 @@ PanelWindow {
             bottomRightRadius: bottomLeftRadius
         }
 
-        layer.enabled: true
+        layer.enabled: visible && !notch.transitioning && !notch.osdClosing
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Theme.notchShadow
@@ -846,11 +803,6 @@ PanelWindow {
                 }
 
             }
-        }
-
-        ControlCenterPanel {
-            id: controlPanel
-            notchWindow: notch
         }
 
         Item {
