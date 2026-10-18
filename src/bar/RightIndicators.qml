@@ -9,6 +9,7 @@ RowLayout {
     id: indicators
 
     signal volumeClicked()
+    signal brightnessClicked()
     required property var barWindow
 
     anchors.right: parent.right
@@ -28,6 +29,7 @@ RowLayout {
         property real pressGlobalX: 0
         property real pressVolume: 0
         property real animatedWidth: collapsedWidth
+        property real displayedVolume: Audio.volume
         readonly property int collapsedWidth: 28
         readonly property int expandedWidth: 84
         readonly property int iconSlotWidth: 34
@@ -50,6 +52,12 @@ RowLayout {
         Behavior on animatedWidth {
             NumberAnimation {
                 duration: 180
+                easing.type: Easing.OutCubic
+            }
+        }
+        Behavior on displayedVolume {
+            NumberAnimation {
+                duration: 90
                 easing.type: Easing.OutCubic
             }
         }
@@ -94,7 +102,8 @@ RowLayout {
                 color: Theme.indicatorHover
 
                 Rectangle {
-                    width: parent.width * Math.max(0, Math.min(1, Audio.volume))
+                    width: parent.width * Math.max(0, Math.min(1,
+                        volumeControl.displayedVolume))
                     height: parent.height
                     radius: parent.radius
                     color: Theme.barText
@@ -118,7 +127,7 @@ RowLayout {
             x: volumeControl.width - 22
             y: (volumeControl.height - height) / 2
             width: volumeControl.dragging ? Math.max(0, Math.min(16,
-                volumeControl.width * Audio.volume
+                volumeControl.width * volumeControl.displayedVolume
                     - (volumeControl.width - 22))) : 0
             height: 16
             clip: true
@@ -155,6 +164,136 @@ RowLayout {
                     indicators.volumeClicked();
             }
             onCanceled: volumeControl.dragging = false
+        }
+    }
+
+    Item {
+        id: brightnessControl
+        property bool dragging: false
+        property bool moved: false
+        property real pressGlobalX: 0
+        property real pressBrightness: 0
+        property real animatedWidth: collapsedWidth
+        property real displayedBrightness: Brightness.brightness
+        readonly property int collapsedWidth: 28
+        readonly property int expandedWidth: 84
+
+        width: animatedWidth
+        height: 28
+        Layout.preferredWidth: animatedWidth
+        Layout.preferredHeight: 28
+        Layout.alignment: Qt.AlignVCenter
+        onDraggingChanged: animatedWidth = dragging ? expandedWidth : collapsedWidth
+        Behavior on animatedWidth {
+            NumberAnimation {
+                duration: 180
+                easing.type: Easing.OutCubic
+            }
+        }
+        Behavior on displayedBrightness {
+            NumberAnimation {
+                duration: 90
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 8
+            color: brightnessControl.dragging ? "transparent"
+                : (brightnessHover.hovered ? Theme.indicatorHover : "transparent")
+        }
+
+        Item {
+            id: brightnessSliderVisual
+            x: brightnessControl.dragging ? 3 : 0
+            y: brightnessControl.dragging ? -1 : 0
+            width: brightnessControl.width
+            height: 28
+            opacity: brightnessControl.dragging ? 1 : 0
+            Behavior on x {
+                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            }
+            Behavior on y {
+                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            }
+            Behavior on opacity {
+                NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 14
+                color: Theme.indicatorHover
+
+                Rectangle {
+                    width: parent.width * Math.max(0, Math.min(1,
+                        brightnessControl.displayedBrightness))
+                    height: parent.height
+                    radius: parent.radius
+                    color: Theme.barText
+                }
+            }
+        }
+
+        Image {
+            z: 2
+            anchors.right: parent.right
+            anchors.rightMargin: 6
+            anchors.verticalCenter: parent.verticalCenter
+            width: 16
+            height: 16
+            source: Icon.getPath("sun" + Theme.topBarIconSuffix)
+            sourceSize: Qt.size(15, 15)
+            smooth: true
+        }
+
+        Item {
+            id: brightnessFilledIconMask
+            z: 3
+            x: brightnessControl.width - 22
+            y: (brightnessControl.height - height) / 2
+            width: brightnessControl.dragging ? Math.max(0, Math.min(16,
+                brightnessControl.width * brightnessControl.displayedBrightness
+                    - (brightnessControl.width - 22))) : 0
+            height: 16
+            clip: true
+
+            Image {
+                width: 16
+                height: 16
+                source: Icon.getPath("sun_black")
+                sourceSize: Qt.size(15, 15)
+                smooth: true
+            }
+        }
+
+        HoverHandler { id: brightnessHover; cursorShape: Qt.PointingHandCursor }
+        MouseArea {
+            anchors.fill: parent
+            onPressed: function(mouse) {
+                brightnessControl.dragging = true;
+                brightnessControl.moved = false;
+                brightnessControl.pressBrightness = Brightness.brightness;
+                brightnessControl.pressGlobalX = mapToItem(null, mouse.x, mouse.y).x;
+            }
+            onPositionChanged: function(mouse) {
+                if (!pressed)
+                    return;
+                const globalX = mapToItem(null, mouse.x, mouse.y).x;
+                const delta = globalX - brightnessControl.pressGlobalX;
+                if (Math.abs(delta) < 2)
+                    return;
+                brightnessControl.moved = true;
+                Brightness.setBrightness(brightnessControl.pressBrightness
+                    + delta / (brightnessControl.expandedWidth - 24));
+            }
+            onReleased: {
+                brightnessControl.dragging = false;
+                if (!brightnessControl.moved)
+                    indicators.brightnessClicked();
+            }
+            onCanceled: brightnessControl.dragging = false
         }
     }
 

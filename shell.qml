@@ -34,6 +34,7 @@ PanelWindow {
     RightIndicators {
         barWindow: bar
         onVolumeClicked: notch.show("volume")
+        onBrightnessClicked: notch.show("brightness")
     }
     Notch {
         id: notch
