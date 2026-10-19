@@ -6,7 +6,16 @@ import QtQuick
 
 Singleton {
     PwObjectTracker {
-        objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource]
+        objects: (Pipewire.nodes.values || []).concat([
+            Pipewire.defaultAudioSink,
+            Pipewire.defaultAudioSource
+        ])
+    }
+
+    readonly property var appStreams: {
+        const nodes = Pipewire.nodes.values || [];
+        return nodes.filter(node => node && node.isStream && node.isSink
+            && node.audio && node.ready);
     }
 
     readonly property bool microphoneMuted: {
@@ -36,6 +45,15 @@ Singleton {
         const next = Math.max(0, Math.min(1, Number(value)));
         sink.audio.muted = false;
         sink.audio.volume = next;
+        return next;
+    }
+
+    function setStreamVolume(stream, value) {
+        if (!stream || !stream.ready || !stream.audio)
+            return -1;
+        const next = Math.max(0, Math.min(1, Number(value)));
+        stream.audio.muted = false;
+        stream.audio.volume = next;
         return next;
     }
 

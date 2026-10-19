@@ -8,8 +8,6 @@ import qs.src.services
 RowLayout {
     id: indicators
 
-    signal volumeClicked()
-    signal brightnessClicked()
     required property var barWindow
 
     anchors.right: parent.right
@@ -24,10 +22,8 @@ RowLayout {
 
     Item {
         id: volumeControl
-        property bool dragging: false
-        property bool moved: false
-        property real pressGlobalX: 0
-        property real pressVolume: 0
+        property bool osdVisible: false
+        property bool menuOpen: false
         property real animatedWidth: collapsedWidth
         property real displayedVolume: Audio.volume
         readonly property int collapsedWidth: 28
@@ -48,7 +44,7 @@ RowLayout {
         Layout.preferredWidth: animatedWidth
         Layout.preferredHeight: 28
         Layout.alignment: Qt.AlignVCenter
-        onDraggingChanged: animatedWidth = dragging ? expandedWidth : collapsedWidth
+        onOsdVisibleChanged: animatedWidth = osdVisible ? expandedWidth : collapsedWidth
         Behavior on animatedWidth {
             NumberAnimation {
                 duration: 180
@@ -65,17 +61,17 @@ RowLayout {
         Rectangle {
             anchors.fill: parent
             radius: 8
-            color: volumeControl.dragging ? "transparent"
+            color: volumeControl.osdVisible ? "transparent"
                 : (volumeHover.hovered ? Theme.indicatorHover : "transparent")
         }
 
         Item {
             id: sliderVisual
-            x: volumeControl.dragging ? 3 : 0
-            y: volumeControl.dragging ? -1 : 0
+            x: volumeControl.osdVisible ? 3 : 0
+            y: volumeControl.osdVisible ? -1 : 0
             width: volumeControl.width
             height: 28
-            opacity: volumeControl.dragging ? 1 : 0
+            opacity: volumeControl.osdVisible ? 1 : 0
             transform: Scale {
                 origin.x: sliderVisual.width / 2
                 origin.y: sliderVisual.height / 2
@@ -100,11 +96,14 @@ RowLayout {
                 height: 28
                 radius: 14
                 color: Theme.indicatorHover
+                clip: true
 
                 Rectangle {
-                    width: parent.width * Math.max(0, Math.min(1,
+                    x: 1
+                    y: 1
+                    width: (parent.width - 2) * Math.max(0, Math.min(1,
                         volumeControl.displayedVolume))
-                    height: parent.height
+                    height: parent.height - 2
                     radius: parent.radius
                     color: Theme.barText
                 }
@@ -126,7 +125,7 @@ RowLayout {
             z: 3
             x: volumeControl.width - 22
             y: (volumeControl.height - height) / 2
-            width: volumeControl.dragging ? Math.max(0, Math.min(16,
+            width: volumeControl.osdVisible ? Math.max(0, Math.min(16,
                 volumeControl.width * volumeControl.displayedVolume
                     - (volumeControl.width - 22))) : 0
             height: 16
@@ -141,38 +140,38 @@ RowLayout {
         HoverHandler { id: volumeHover; cursorShape: Qt.PointingHandCursor }
         MouseArea {
             anchors.fill: parent
-            onPressed: function(mouse) {
-                volumeControl.dragging = true;
-                volumeControl.moved = false;
-                volumeControl.pressVolume = Audio.volume;
-                volumeControl.pressGlobalX = mapToItem(null, mouse.x, mouse.y).x;
-            }
-            onPositionChanged: function(mouse) {
-                if (!pressed)
-                    return;
-                const globalX = mapToItem(null, mouse.x, mouse.y).x;
-                const delta = globalX - volumeControl.pressGlobalX;
-                if (Math.abs(delta) < 2)
-                    return;
-                volumeControl.moved = true;
-                Audio.setVolume(volumeControl.pressVolume
-                    + delta / (volumeControl.expandedWidth - 24));
-            }
-            onReleased: {
-                volumeControl.dragging = false;
-                if (!volumeControl.moved)
-                    indicators.volumeClicked();
-            }
-            onCanceled: volumeControl.dragging = false
+            onClicked: volumeControl.menuOpen = !volumeControl.menuOpen
+        }
+
+        Timer {
+            id: volumeOsdTimer
+            interval: 1200
+            onTriggered: volumeControl.osdVisible = false
+        }
+
+        function showVolumeOsd() {
+            volumeControl.osdVisible = true;
+            volumeOsdTimer.restart();
+        }
+
+        Connections {
+            target: Audio
+            function onVolumeChanged() { volumeControl.showVolumeOsd(); }
+            function onMutedChanged() { volumeControl.showVolumeOsd(); }
+        }
+
+        VolumeMenu {
+            hostWindow: indicators.barWindow
+            anchorItem: volumeControl
+            open: volumeControl.menuOpen
+            onDismissed: volumeControl.menuOpen = false
         }
     }
 
     Item {
         id: brightnessControl
-        property bool dragging: false
-        property bool moved: false
-        property real pressGlobalX: 0
-        property real pressBrightness: 0
+        property bool osdVisible: false
+        property bool menuOpen: false
         property real animatedWidth: collapsedWidth
         property real displayedBrightness: Brightness.brightness
         readonly property int collapsedWidth: 28
@@ -183,7 +182,7 @@ RowLayout {
         Layout.preferredWidth: animatedWidth
         Layout.preferredHeight: 28
         Layout.alignment: Qt.AlignVCenter
-        onDraggingChanged: animatedWidth = dragging ? expandedWidth : collapsedWidth
+        onOsdVisibleChanged: animatedWidth = osdVisible ? expandedWidth : collapsedWidth
         Behavior on animatedWidth {
             NumberAnimation {
                 duration: 180
@@ -200,17 +199,17 @@ RowLayout {
         Rectangle {
             anchors.fill: parent
             radius: 8
-            color: brightnessControl.dragging ? "transparent"
+            color: brightnessControl.osdVisible ? "transparent"
                 : (brightnessHover.hovered ? Theme.indicatorHover : "transparent")
         }
 
         Item {
             id: brightnessSliderVisual
-            x: brightnessControl.dragging ? 3 : 0
-            y: brightnessControl.dragging ? -1 : 0
+            x: brightnessControl.osdVisible ? 3 : 0
+            y: brightnessControl.osdVisible ? -1 : 0
             width: brightnessControl.width
             height: 28
-            opacity: brightnessControl.dragging ? 1 : 0
+            opacity: brightnessControl.osdVisible ? 1 : 0
             Behavior on x {
                 NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
             }
@@ -225,11 +224,14 @@ RowLayout {
                 anchors.fill: parent
                 radius: 14
                 color: Theme.indicatorHover
+                clip: true
 
                 Rectangle {
-                    width: parent.width * Math.max(0, Math.min(1,
+                    x: 1
+                    y: 1
+                    width: (parent.width - 2) * Math.max(0, Math.min(1,
                         brightnessControl.displayedBrightness))
-                    height: parent.height
+                    height: parent.height - 2
                     radius: parent.radius
                     color: Theme.barText
                 }
@@ -253,7 +255,7 @@ RowLayout {
             z: 3
             x: brightnessControl.width - 22
             y: (brightnessControl.height - height) / 2
-            width: brightnessControl.dragging ? Math.max(0, Math.min(16,
+            width: brightnessControl.osdVisible ? Math.max(0, Math.min(16,
                 brightnessControl.width * brightnessControl.displayedBrightness
                     - (brightnessControl.width - 22))) : 0
             height: 16
@@ -271,29 +273,30 @@ RowLayout {
         HoverHandler { id: brightnessHover; cursorShape: Qt.PointingHandCursor }
         MouseArea {
             anchors.fill: parent
-            onPressed: function(mouse) {
-                brightnessControl.dragging = true;
-                brightnessControl.moved = false;
-                brightnessControl.pressBrightness = Brightness.brightness;
-                brightnessControl.pressGlobalX = mapToItem(null, mouse.x, mouse.y).x;
-            }
-            onPositionChanged: function(mouse) {
-                if (!pressed)
-                    return;
-                const globalX = mapToItem(null, mouse.x, mouse.y).x;
-                const delta = globalX - brightnessControl.pressGlobalX;
-                if (Math.abs(delta) < 2)
-                    return;
-                brightnessControl.moved = true;
-                Brightness.setBrightness(brightnessControl.pressBrightness
-                    + delta / (brightnessControl.expandedWidth - 24));
-            }
-            onReleased: {
-                brightnessControl.dragging = false;
-                if (!brightnessControl.moved)
-                    indicators.brightnessClicked();
-            }
-            onCanceled: brightnessControl.dragging = false
+            onClicked: brightnessControl.menuOpen = !brightnessControl.menuOpen
+        }
+
+        Timer {
+            id: brightnessOsdTimer
+            interval: 1200
+            onTriggered: brightnessControl.osdVisible = false
+        }
+
+        function showBrightnessOsd() {
+            brightnessControl.osdVisible = true;
+            brightnessOsdTimer.restart();
+        }
+
+        Connections {
+            target: Brightness
+            function onBrightnessChanged() { brightnessControl.showBrightnessOsd(); }
+        }
+
+        BrightnessMenu {
+            hostWindow: indicators.barWindow
+            anchorItem: brightnessControl
+            open: brightnessControl.menuOpen
+            onDismissed: brightnessControl.menuOpen = false
         }
     }
 

@@ -2,69 +2,15 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Shapes
-import QtQuick.Effects
 import Quickshell.Wayland
 
 import qs.src.bar.notch_modes
+import qs.src.bar.notch_widgets
 import qs.src.services
 
 // One top surface hosts transient OSDs and several focused menu modes.
 PanelWindow {
     id: notch
-
-    // The two shoulders fill the space above a concave quarter-circle where
-    // the notch meets the top edge. They stay outside surface.clip so the
-    // launcher and OSD keep their existing rounded bottom corners.
-    component NotchShoulder: Shape {
-        required property var notchSurface
-        property bool rightSide: false
-        property real scaleY: 1
-        property real targetSize: 18
-        property real animatedSize: targetSize
-        readonly property real cornerSize: Math.min(animatedSize, Math.max(0, notchSurface.height))
-
-        Behavior on animatedSize {
-            SpringAnimation {
-                spring: 9
-                damping: 0.75
-                mass: 1.6
-                epsilon: 0.01
-            }
-        }
-
-        // Tuck one pixel under the main surface to avoid an antialiased seam.
-        x: rightSide ? notchSurface.x + notchSurface.width - 1
-            : notchSurface.x - cornerSize + 1
-        y: notchSurface.y
-        width: cornerSize
-        height: cornerSize
-        visible: notchSurface.height > 0
-        transform: Scale {
-            origin.x: cornerSize / 2
-            origin.y: 0
-            xScale: rightSide ? -1 : 1
-            yScale: scaleY
-        }
-
-        ShapePath {
-            strokeWidth: -1
-            fillGradient: LinearGradient {
-                x1: 0
-                y1: 0
-                x2: 0
-                y2: Math.max(1, notchSurface.height)
-                GradientStop { position: 0.0; color: Theme.notchGradientTop }
-                GradientStop { position: 0.72; color: Theme.notchGradientMid }
-                GradientStop { position: 1.0; color: Theme.notchGradientBottom }
-            }
-            startX: 0
-            startY: 0
-            PathLine { x: cornerSize; y: 0 }
-            PathLine { x: cornerSize; y: cornerSize }
-            PathQuad { x: 0; y: 0; controlX: cornerSize; controlY: 0 }
-        }
-    }
 
     component NotchOsd: Item {
         required property string mode
@@ -100,8 +46,8 @@ PanelWindow {
     }
 
     screen: bar.screen
-    // Keep the full-screen layer alive below windows while idle. Recreating it
-    // on each OSD or launcher transition causes visible stalls.
+    // Keep the full-screen layer alive while idle. Recreating it on each OSD
+    // or launcher transition causes visible stalls.
     visible: true
     color: "transparent"
 
@@ -112,8 +58,9 @@ PanelWindow {
         right: true
     }
 
-    WlrLayershell.layer: menuOpen || menuClosing || displaying || osdClosing
-        || transitioning ? WlrLayer.Overlay : WlrLayer.Bottom
+    // The notch must sit above application windows for the compositor to blur
+    // them behind the translucent surface, not just the wallpaper.
+    WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: menuOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.namespace: "quickshell-notch-launcher"
@@ -128,7 +75,7 @@ PanelWindow {
     property int wallpaperIndex: 0
     property bool modeTransitioning: false
     readonly property int menuWidth: Math.round(
-        (launcherMode === "wallpapers" ? 640 : 420) * Config.uiScale)
+        (launcherMode === "wallpapers" ? 640 : 380) * Config.uiScale)
     readonly property bool actionSearch: notch.searchQuery.startsWith(">")
     readonly property bool calculatorActive: Calculator.active
         && Calculator.query === notch.searchQuery.trim()
@@ -165,10 +112,15 @@ PanelWindow {
             apps.push(action);
         return apps.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     }
-    readonly property int osdHeight: Math.round(32 * Config.uiScale)
-    readonly property int osdContentInset: 18
-    readonly property int pillShoulderSize: 12
-    readonly property int osdCornerRadius: 12
+    readonly property int osdHeight: Math.round(34 * Config.uiScale)
+    readonly property int idleHeight: osdHeight
+    readonly property int osdContentInset: 14
+    // All states share the mini notch's centered vertical position. Larger
+    // menus keep that same top edge instead of shifting between states.
+    readonly property int floatingTopPadding: bar.niriGap
+    readonly property int centeredTopPadding: floatingTopPadding
+        + (bar.reservedHeight - osdHeight) / 2
+    readonly property int osdCornerRadius: 999
     readonly property int menuCornerRadius: launcherMode === "wallpapers"
         ? 34 : 24
     property real animatedMenuRadius: menuCornerRadius
@@ -194,6 +146,9 @@ PanelWindow {
     property bool menuClosing: false
     property bool morphingFromOsd: false
     property bool osdTransitioning: false
+    readonly property bool osdState: displaying || osdActive || osdClosing
+    readonly property bool osdLayoutState: osdActive && !osdClosing
+    readonly property bool menuState: menuOpen || menuOpening || menuClosing
 
     onMenuOpenChanged: {
         if (menuOpen) {
@@ -244,8 +199,6 @@ PanelWindow {
     Component.onCompleted: refreshWallpapers()
 
     function toggleMenu() {
-        scaleAnimation.stop();
-
         if (notch.menuOpen || notch.menuOpening) {
             // Keep the popup visible before changing the open state. This
             // prevents a one-frame visible=false gap during the close.
@@ -255,7 +208,6 @@ PanelWindow {
             notch.menuOpening = false;
             notch.menuOpen = false;
             notch.transitioning = true;
-            verticalScale.yScale = 1;
             menuAnimationTimer.restart();
             return;
         }
@@ -275,10 +227,6 @@ PanelWindow {
         notch.menuOpening = true;
         notch.transitioning = true;
         notch.menuOpen = true;
-        // Let the height behavior below do the entrance animation. Scaling a
-        // full-screen layer is noticeably more expensive than resizing the
-        // small surface itself.
-        verticalScale.yScale = 1;
         menuAnimationTimer.restart();
     }
 
@@ -423,14 +371,6 @@ PanelWindow {
         if (alreadyVisible)
             return;
 
-        scaleAnimation.stop();
-        verticalScale.yScale = 0.01;
-        Qt.callLater(function() {
-            if (notch.displaying && !notch.menuOpen && !notch.osdClosing) {
-                scaleAnimation.to = 1;
-                scaleAnimation.restart();
-            }
-        });
     }
 
     Timer {
@@ -444,15 +384,9 @@ PanelWindow {
         id: hideTimer
         interval: 900
         onTriggered: {
+            // Keep the pill's height fixed while the content fades. The
+            // width-only morph happens when the idle clock returns.
             notch.osdClosing = true;
-            scaleAnimation.stop();
-            verticalScale.yScale = 1;
-            Qt.callLater(function() {
-                if (notch.osdClosing) {
-                    scaleAnimation.to = 0.01;
-                    scaleAnimation.restart();
-                }
-            });
             exitTimer.start();
         }
     }
@@ -500,71 +434,24 @@ PanelWindow {
         onClicked: notch.toggleMenu()
     }
 
-    NotchShoulder {
-        notchSurface: surface
-        scaleY: verticalScale.yScale
-        targetSize: notch.menuOpen || notch.menuOpening
-            ? (notch.launcherMode === "apps" ? 24 : 30)
-            : (notch.osdActive || notch.osdClosing ? notch.pillShoulderSize : 18)
-    }
-
-    NotchShoulder {
-        notchSurface: surface
-        rightSide: true
-        scaleY: verticalScale.yScale
-        targetSize: notch.menuOpen || notch.menuOpening
-            ? (notch.launcherMode === "apps" ? 24 : 30)
-            : (notch.osdActive || notch.osdClosing ? notch.pillShoulderSize : 18)
-    }
-
-    // Pad the shadow source explicitly so the GPU effect never changes the
-    // notch geometry or gets clipped at its edges.
-    Item {
-        id: notchShadow
-        x: surface.x - 24
-        y: surface.y - 24
-        width: surface.width + 48
-        height: surface.height + 48
-        visible: surface.height > 0
-        z: -1
-        opacity: Math.min(1, surface.height / 12)
-        transform: Scale {
-            origin.x: notchShadow.width / 2
-            origin.y: 24
-            yScale: verticalScale.yScale
-        }
-
-        Rectangle {
-            x: 24
-            y: 24
-            width: parent.width - 48
-            height: parent.height - 48
-            color: Theme.notchShadow
-            topLeftRadius: 0
-            topRightRadius: 0
-            bottomLeftRadius: notch.menuOpen || notch.menuClosing
-                ? Math.min(height / 2, notch.animatedMenuRadius)
-                : Math.min(height / 2, notch.osdCornerRadius)
-            bottomRightRadius: bottomLeftRadius
-        }
-
-        layer.enabled: visible && !notch.transitioning && !notch.osdClosing
-        layer.effect: MultiEffect {
-            shadowEnabled: true
-            shadowColor: Theme.notchShadow
-            shadowBlur: 1.0
-            shadowHorizontalOffset: 0
-            shadowVerticalOffset: 0
-            shadowOpacity: 0.8
-            autoPaddingEnabled: false
-        }
-    }
-
     Rectangle {
         id: surface
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        width: notch.menuOpen || notch.menuOpening ? notch.menuWidth : 300
+        // Keep the top edge fixed while the notch changes state. The shared
+        // position centers the mini states in the reserved top zone.
+        y: notch.centeredTopPadding
+        Behavior on y {
+            SpringAnimation {
+                spring: 9
+                damping: 0.75
+                mass: 1.6
+                epsilon: 0.01
+            }
+        }
+        width: notch.menuOpen || notch.menuOpening
+            ? notch.menuWidth
+            : (notch.osdLayoutState ? 280 : Math.max(132,
+                Math.round(idleClock.implicitWidth + 32)))
         // Keep menu transitions springing instead of snapping between widths.
         Behavior on width {
             SpringAnimation {
@@ -576,14 +463,10 @@ PanelWindow {
         }
         height: notch.menuOpen || notch.menuOpening
             ? notch.menuHeight
-            : (notch.osdActive || notch.osdClosing ? notch.osdHeight : 0)
-        radius: 0
-        topLeftRadius: 0
-        topRightRadius: 0
-        bottomLeftRadius: notch.menuOpen || notch.menuClosing
+            : (notch.osdState ? notch.osdHeight : notch.idleHeight)
+        radius: notch.menuOpen || notch.menuClosing
             ? Math.min(height / 2, notch.animatedMenuRadius)
             : Math.min(height / 2, notch.osdCornerRadius)
-        bottomRightRadius: bottomLeftRadius
         color: "transparent"
         border.width: 0
         gradient: Gradient {
@@ -593,24 +476,6 @@ PanelWindow {
         }
         clip: true
         opacity: 1
-
-        transform: Scale {
-            id: verticalScale
-            origin.x: surface.width / 2
-            origin.y: 0
-            xScale: 1
-            yScale: 0.82
-        }
-
-        SpringAnimation {
-            id: scaleAnimation
-            target: verticalScale
-            property: "yScale"
-            spring: 11
-            damping: 0.68
-            mass: 1.6
-            epsilon: 0.01
-        }
 
         Behavior on height {
             SpringAnimation {
@@ -967,5 +832,31 @@ PanelWindow {
 
         NotchOsd { mode: "volume" }
         NotchOsd { mode: "brightness" }
+    }
+
+    // Keep the idle clock anchored to its original position while the OSD
+    // pill moves to the center of the reserved zone.
+    Item {
+        id: idleClockLayer
+        x: (parent.width - width) / 2
+        y: notch.centeredTopPadding
+        width: Math.max(132, Math.round(idleClock.implicitWidth + 32))
+        height: notch.idleHeight
+        z: 2
+        visible: !notch.menuState || opacity > 0
+        opacity: notch.menuState || notch.osdLayoutState ? 0 : 1
+        Behavior on opacity {
+            SpringAnimation {
+                spring: 11
+                damping: 0.75
+                mass: 1.6
+                epsilon: 0.01
+            }
+        }
+
+        Clock {
+            id: idleClock
+            anchors.centerIn: parent
+        }
     }
 }

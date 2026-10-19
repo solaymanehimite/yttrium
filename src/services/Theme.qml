@@ -61,7 +61,7 @@ Singleton {
     readonly property color selection: "#557aa7"
     readonly property color batteryTrack: "#707070"
     readonly property color notchGradientTop: "#ff000000"
-    readonly property color notchGradientMid: "#f2000000"
+    readonly property color notchGradientMid: "#fb000000"
     readonly property color notchGradientBottom: "#e6000000"
     readonly property color notchShadow: "#000000"
     readonly property color controlTile: "transparent"

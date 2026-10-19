@@ -20,3 +20,7 @@ awww img "$wallpaper" \
     --transition-type grow \
     --transition-pos 0.5,0.75 \
     --transition-duration 0.3
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell"
+mkdir -p "$state_dir"
+printf '%s\n' "$wallpaper" > "$state_dir/current-wallpaper"

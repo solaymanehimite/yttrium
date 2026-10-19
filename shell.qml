@@ -9,6 +9,8 @@ PanelWindow {
     // Keep the cleartouchd client alive for the lifetime of the shell.
     readonly property var multiPadService: MultiPad
     readonly property int niriGap: Config.barGap
+    readonly property int exclusiveZonePadding: 6
+    readonly property int reservedHeight: implicitHeight + exclusiveZonePadding * 2
 
     anchors {
         top: true
@@ -23,19 +25,13 @@ PanelWindow {
         left: bar.niriGap
         right: bar.niriGap
     }
-    exclusiveZone: implicitHeight
+    exclusiveZone: reservedHeight
 
     implicitHeight: Config.barHeight
     color: "transparent"
 
-    GlobalMenu {
-        barWindow: bar
-    }
-    RightIndicators {
-        barWindow: bar
-        onVolumeClicked: notch.show("volume")
-        onBrightnessClicked: notch.show("brightness")
-    }
+    // Keep the top reservation for the compositor, but leave the old bar
+    // surface empty. The notch is now the only visible top-level control.
     Notch {
         id: notch
     }
