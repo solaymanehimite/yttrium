@@ -10,7 +10,9 @@ PanelWindow {
     readonly property var multiPadService: MultiPad
     readonly property int niriGap: Config.barGap
     readonly property int exclusiveZonePadding: 6
-    readonly property int reservedHeight: implicitHeight + exclusiveZonePadding * 2
+    // Make the transparent surface fill the existing reserved zone. This lets
+    // left/right controls share the notch's vertical center without clipping.
+    readonly property int reservedHeight: implicitHeight
 
     anchors {
         top: true
@@ -27,11 +29,9 @@ PanelWindow {
     }
     exclusiveZone: reservedHeight
 
-    implicitHeight: Config.barHeight
+    implicitHeight: Config.barHeight + exclusiveZonePadding * 2
     color: "transparent"
 
-    // Keep the top reservation for the compositor, but leave the old bar
-    // surface empty. The notch is now the only visible top-level control.
     Notch {
         id: notch
     }

@@ -19,13 +19,37 @@ Singleton {
         }
     }
 
+    // Matugen already publishes the active palette for GTK. Reading that
+    // generated file keeps the notch in sync whenever the wallpaper changes,
+    // without duplicating Matugen's palette in the shell.
+    FileView {
+        id: matugenFile
+        path: Quickshell.env("HOME") + "/.config/gtk-3.0/colors.css"
+        watchChanges: true
+        printErrors: false
+        onLoaded: Theme.updateMatugenPalette(text())
+    }
+
+    function cssColor(contents, name, fallback) {
+        const expression = new RegExp("@define-color\\s+" + name
+            + "\\s+(#[0-9a-fA-F]{6,8})");
+        const match = contents.match(expression);
+        return match ? match[1] : fallback;
+    }
+
+    function updateMatugenPalette(contents) {
+        matugenAccent = cssColor(contents, "accent_color", matugenAccent);
+        matugenSurface = cssColor(contents, "window_bg_color", matugenSurface);
+    }
+
     function save() {
         themeFile.setText(dark ? "dark\n" : "light\n");
     }
 
-    // The notch deliberately does not use these colors. This palette is only
-    // for the top menu bar and its popup menus.
     property bool dark: false
+
+    property color matugenAccent: "#e4c36c"
+    property color matugenSurface: "#16130b"
 
     readonly property color barText: dark ? "#f4f5f7" : "#111827"
     readonly property color barMutedText: dark ? "#aeb8c4" : "#4b5563"
@@ -50,7 +74,10 @@ Singleton {
     readonly property color panelSurfaceRaised: "#20242b"
     readonly property color tileActive: "#f6f8fb"
     readonly property color tileHover: "#1c2026"
-    readonly property color textPrimary: "#f4f5f7"
+    // The notch uses a dark material in both shell variants, so its foreground
+    // must not follow the light top-bar palette.
+    readonly property color notchText: "#f4f5f7"
+    readonly property color textPrimary: notchText
     readonly property color textMuted: "#9da4b0"
     readonly property color textQuiet: "#777e8b"
     readonly property color textOnDark: "#ffffff"
@@ -60,10 +87,17 @@ Singleton {
     readonly property color osdTrack: "#3a3a3a"
     readonly property color selection: "#557aa7"
     readonly property color batteryTrack: "#707070"
-    readonly property color notchGradientTop: "#ff000000"
-    readonly property color notchGradientMid: "#fb000000"
-    readonly property color notchGradientBottom: "#e6000000"
-    readonly property color notchShadow: "#000000"
+    // Use the midpoint between the Matugen surface and black as the notch
+    // tint. It stays fully opaque at the top and fades to 70% at the bottom.
+    readonly property color notchTint: Qt.rgba(matugenSurface.r * 0.5,
+        matugenSurface.g * 0.5, matugenSurface.b * 0.5, 1.0)
+    readonly property color notchGradientTop: notchTint
+    readonly property color notchGradientMid: Qt.rgba(notchTint.r,
+        notchTint.g, notchTint.b, 0.85)
+    readonly property color notchGradientBottom: Qt.rgba(notchTint.r,
+        notchTint.g, notchTint.b, 0.70)
+    readonly property color notchShadow: Qt.rgba(notchTint.r,
+        notchTint.g, notchTint.b, 0.35)
     readonly property color controlTile: "transparent"
     readonly property color controlTileHover: "#1affffff"
     readonly property color controlActiveTop: "#ffffffff"

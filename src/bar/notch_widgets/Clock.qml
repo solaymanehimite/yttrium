@@ -31,7 +31,7 @@ Item {
             Layout.preferredWidth: clockWidth.width
             Layout.maximumWidth: clockWidth.width
             text: Time.time
-            color: Theme.barText
+            color: Theme.notchText
             font.family: Config.fontFamily
             font.pixelSize: Math.round(15 * Config.uiScale)
             font.weight: 550
@@ -41,7 +41,7 @@ Item {
         Text {
             Layout.alignment: Qt.AlignVCenter
             text: Time.date
-            color: Theme.barText
+            color: Theme.notchText
             font.family: Config.fontFamily
             font.pixelSize: Math.round(15 * Config.uiScale)
             font.weight: 550

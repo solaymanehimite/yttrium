@@ -10,7 +10,7 @@ Item {
     readonly property real percentage: Services.PowerBattery.percentage
     readonly property bool batteryAvailable: Services.PowerBattery.available
     readonly property color backgroundColor: Services.Theme.batteryTrack
-    readonly property color fillColor: Services.Theme.barText
+    readonly property color fillColor: Services.Theme.notchText
     readonly property color pinColor: Services.PowerBattery.fullyCharged ? fillColor : backgroundColor
 
     visible: batteryAvailable
