@@ -106,6 +106,7 @@ PanelWindow {
                 && (!query || String(entry.name).toLowerCase().includes(query)));
         const action = {
             name: "Actions",
+            description: "Type > for commands",
             isActionPrefix: true
         };
         if (!query || action.name.toLowerCase().includes(query))
@@ -132,12 +133,13 @@ PanelWindow {
             epsilon: 0.01
         }
     }
-    readonly property int menuHeight: Math.round(
-        (launcherMode === "wallpapers"
-            ? 250
-            : Math.max(90, Math.min(360,
-                54 + Math.max(1, launcherEntries.length) * 36)))
-        * Config.uiScale)
+    // Launcher rows and insets have fixed pixel heights. Scaling the entire
+    // menu after calculating them accumulated spare space as result counts
+    // grew; only the wallpaper panel uses the global UI scale here.
+    readonly property int menuHeight: launcherMode === "wallpapers"
+        ? Math.round(250 * Config.uiScale)
+        : Math.max(104, Math.min(392,
+            68 + Math.max(1, launcherEntries.length) * 36))
     property string osdMode: ""
     property bool displaying: false
     property bool osdClosing: false
@@ -511,19 +513,20 @@ PanelWindow {
             }
             anchors {
                 top: parent.top
+                bottom: parent.bottom
                 left: parent.left
                 right: parent.right
                 leftMargin: 12
                 rightMargin: 12
-                topMargin: 10
+                topMargin: 14
             }
-            spacing: Config.space4
+            spacing: Config.space8
 
             TextInput {
                 id: searchInput
                 width: parent.width
                 height: 34
-                leftPadding: 34
+                leftPadding: 12
                 rightPadding: 12
                 text: notch.searchQuery
                 color: Theme.textPrimary
@@ -531,7 +534,7 @@ PanelWindow {
                 clip: true
                 focus: launcher.active
                 font.family: Config.fontFamily
-                font.pixelSize: Math.round(15 * Config.uiScale)
+                font.pixelSize: Math.round(17 * Config.uiScale)
                 verticalAlignment: Text.AlignVCenter
                 onTextChanged: {
                     notch.searchQuery = text;
@@ -558,19 +561,9 @@ PanelWindow {
                     }
                 }
 
-                Image {
-                    anchors.left: parent.left
-                    anchors.leftMargin: 12
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 15
-                    height: 15
-                    source: Icon.getPath("search")
-                    sourceSize: Qt.size(15, 15)
-                }
-
                 Text {
                     anchors.left: parent.left
-                    anchors.leftMargin: 34
+                    anchors.leftMargin: 12
                     anchors.verticalCenter: parent.verticalCenter
                     text: "Search applications"
                     color: Theme.textQuiet
@@ -581,7 +574,7 @@ PanelWindow {
 
             Item {
                 width: launcher.width
-                height: Math.max(40, notch.menuHeight - 48)
+                height: Math.max(0, launcher.height - searchInput.height - launcher.spacing)
 
                 ListView {
                     id: appListView
@@ -591,6 +584,12 @@ PanelWindow {
                     currentIndex: notch.selectedIndex
                     cacheBuffer: 72
                     boundsBehavior: Flickable.StopAtBounds
+                    // Preserve the same 12px inset after the final row both
+                    // in short lists and when the list becomes scrollable.
+                    footer: Item {
+                        width: appListView.width
+                        height: 12
+                    }
 
                     delegate: Rectangle {
                             required property var modelData
@@ -620,8 +619,9 @@ PanelWindow {
                         }
 
                         Text {
+                            id: entryLabel
                             anchors.verticalCenter: parent.verticalCenter
-                            width: modelData.isActionPrefix ? parent.width - 52 : parent.width - 30
+                            width: modelData.isActionPrefix ? implicitWidth : parent.width - 30
                             text: String(modelData.name || modelData.id)
                             color: Theme.textPrimary
                             elide: Text.ElideRight
@@ -630,13 +630,15 @@ PanelWindow {
                         }
 
                         Text {
-                            visible: !!modelData.isActionPrefix
+                            visible: !!modelData.description
                             anchors.verticalCenter: parent.verticalCenter
-                            text: ">"
+                            text: String(modelData.description || "")
                             color: Theme.textQuiet
+                            elide: Text.ElideRight
                             font.family: Config.fontFamily
-                            font.pixelSize: Math.round(14 * Config.uiScale)
+                            font.pixelSize: Math.round(13 * Config.uiScale)
                         }
+
                     }
 
                             Keys.onPressed: function(event) {

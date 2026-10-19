@@ -88,14 +88,14 @@ Singleton {
     readonly property color selection: "#557aa7"
     readonly property color batteryTrack: "#707070"
     // Use the midpoint between the Matugen surface and black as the notch
-    // tint. It stays fully opaque at the top and fades to 70% at the bottom.
+    // tint. Keep the lower gradient dense enough for a solid dark material.
     readonly property color notchTint: Qt.rgba(matugenSurface.r * 0.5,
         matugenSurface.g * 0.5, matugenSurface.b * 0.5, 1.0)
     readonly property color notchGradientTop: notchTint
     readonly property color notchGradientMid: Qt.rgba(notchTint.r,
-        notchTint.g, notchTint.b, 0.85)
+        notchTint.g, notchTint.b, 0.94)
     readonly property color notchGradientBottom: Qt.rgba(notchTint.r,
-        notchTint.g, notchTint.b, 0.70)
+        notchTint.g, notchTint.b, 0.86)
     readonly property color notchShadow: Qt.rgba(notchTint.r,
         notchTint.g, notchTint.b, 0.35)
     readonly property color controlTile: "transparent"
