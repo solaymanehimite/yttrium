@@ -4,7 +4,7 @@ import Quickshell
 import QtQuick
 
 Singleton {
-    readonly property string fontFamily: "Satoshi"
+    readonly property string fontFamily: "SF Pro"
     readonly property real uiScale: 1.08
     readonly property string iconDirectory: Quickshell.shellDir + "/assets/icons"
     readonly property string wallpaperDirectory: Quickshell.env("HOME") + "/Pictures/Wallpapers"

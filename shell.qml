@@ -36,4 +36,7 @@ PanelWindow {
         id: notch
     }
 
+    RightIndicators {
+        barWindow: bar
+    }
 }

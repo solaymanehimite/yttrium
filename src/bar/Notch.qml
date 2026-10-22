@@ -535,6 +535,7 @@ PanelWindow {
                 focus: launcher.active
                 font.family: Config.fontFamily
                 font.pixelSize: Math.round(17 * Config.uiScale)
+                font.weight: 550
                 verticalAlignment: Text.AlignVCenter
                 onTextChanged: {
                     notch.searchQuery = text;
@@ -627,6 +628,7 @@ PanelWindow {
                             elide: Text.ElideRight
                             font.family: Config.fontFamily
                             font.pixelSize: Math.round(15 * Config.uiScale)
+                            font.weight: 550
                         }
 
                         Text {

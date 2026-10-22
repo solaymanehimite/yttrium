@@ -93,9 +93,9 @@ Singleton {
         matugenSurface.g * 0.5, matugenSurface.b * 0.5, 1.0)
     readonly property color notchGradientTop: notchTint
     readonly property color notchGradientMid: Qt.rgba(notchTint.r,
-        notchTint.g, notchTint.b, 0.94)
+        notchTint.g, notchTint.b, 0.98)
     readonly property color notchGradientBottom: Qt.rgba(notchTint.r,
-        notchTint.g, notchTint.b, 0.86)
+        notchTint.g, notchTint.b, 0.94)
     readonly property color notchShadow: Qt.rgba(notchTint.r,
         notchTint.g, notchTint.b, 0.35)
     readonly property color controlTile: "transparent"

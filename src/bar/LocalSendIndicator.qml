@@ -8,6 +8,7 @@ Item {
     id: indicator
 
     required property var hostWindow
+    property bool forceLightIcon: false
 
     readonly property string bridgePath: Quickshell.shellDir + "/scripts/localsend-bridge.py"
     property bool running: false
@@ -250,7 +251,8 @@ Item {
         anchors.centerIn: parent
         width: Math.round(16 * Config.uiScale)
         height: Math.round(16 * Config.uiScale)
-        source: Icon.getPath("localsend" + Theme.topBarIconSuffix)
+        source: Icon.getPath("localsend"
+            + (indicator.forceLightIcon ? "" : Theme.topBarIconSuffix))
         sourceSize: Qt.size(16, 16)
         fillMode: Image.PreserveAspectFit
         opacity: indicator.running ? (iconHover.hovered ? 1 : 0.82) : 0.34
