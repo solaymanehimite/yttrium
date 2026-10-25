@@ -83,7 +83,7 @@ PanelWindow {
         const query = notch.searchQuery.trim().toLowerCase();
         if (notch.calculatorActive) {
             return [{
-                name: Calculator.evaluating ? "Calculating…"
+                name: Calculator.evaluating ? ". . ."
                     : (Calculator.result || Calculator.error || "No result"),
                 isCalculatorResult: true
             }];
@@ -609,9 +609,23 @@ PanelWindow {
                         anchors.rightMargin: 8
                         spacing: Config.space10
 
+                        Text {
+                            visible: !!modelData.isCalculatorResult
+                            width: visible ? 20 : 0
+                            height: parent.height
+                            text: "="
+                            color: Theme.textPrimary
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            font.family: Config.fontFamily
+                            font.pixelSize: Math.round(17 * Config.uiScale)
+                            font.weight: 650
+                        }
+
                         Image {
+                            visible: !modelData.isCalculatorResult
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 20
+                            width: visible ? 20 : 0
                             height: 20
                             source: notch.launcherIcon(modelData)
                             fillMode: Image.PreserveAspectFit
@@ -620,9 +634,24 @@ PanelWindow {
                         }
 
                         Text {
+                            visible: !!modelData.isCalculatorResult && Calculator.evaluating
+                            width: visible ? 28 : 0
+                            height: parent.height
+                            text: ". . ."
+                            color: Theme.textPrimary
+                            verticalAlignment: Text.AlignVCenter
+                            font.family: Config.fontFamily
+                            font.pixelSize: Math.round(15 * Config.uiScale)
+                            font.weight: 650
+                        }
+
+                        Text {
                             id: entryLabel
+                            visible: !modelData.isCalculatorResult || !Calculator.evaluating
                             anchors.verticalCenter: parent.verticalCenter
-                            width: modelData.isActionPrefix ? implicitWidth : parent.width - 30
+                            width: modelData.isActionPrefix ? implicitWidth
+                                : parent.width - (modelData.isCalculatorResult
+                                    && Calculator.evaluating ? 68 : 30)
                             text: String(modelData.name || modelData.id)
                             color: Theme.textPrimary
                             elide: Text.ElideRight

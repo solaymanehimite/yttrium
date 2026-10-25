@@ -54,9 +54,7 @@ Singleton {
             if (process.running)
                 process.running = false;
             calculator.runningQuery = calculator.query;
-            process.command = ["python3",
-                Quickshell.shellDir + "/scripts/calculator.py",
-                calculator.runningQuery];
+            process.command = ["qalc", "-t", calculator.runningQuery];
             process.running = true;
         }
     }
@@ -79,7 +77,7 @@ Singleton {
             if (calculator.runningQuery !== calculator.query)
                 return;
             if (exitCode !== 0 && !calculator.result) {
-                calculator.error = "Could not evaluate expression";
+                calculator.error = ". . .";
                 calculator.evaluating = false;
             }
         }
