@@ -41,7 +41,7 @@ Singleton {
         multipad.eventName = String(payload.event || "slider");
         multipad.focusedApp = String(payload.focused_app || "");
 
-        // cleartouchd sends relative, normalized deltas. Apply those to the
+        // multipadd sends relative, normalized deltas. Apply those to the
         // real system controls rather than treating its value as absolute.
         if (multipad.eventName === "volume")
             Audio.adjustRelative(nextDelta);

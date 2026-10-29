@@ -6,7 +6,7 @@ import qs.src.services
 PanelWindow {
     id: bar
 
-    // Keep the cleartouchd client alive for the lifetime of the shell.
+    // Keep the multipadd client alive for the lifetime of the shell.
     readonly property var multiPadService: MultiPad
     readonly property int niriGap: Config.barGap
     readonly property int exclusiveZonePadding: 6

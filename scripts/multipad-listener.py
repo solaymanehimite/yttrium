@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
-"""Keep a Quickshell Process connected to cleartouchd's JSON socket."""
+"""Keep a Quickshell Process connected to multipadd's JSON socket."""
 
 import os
 import socket
 import sys
 import time
 
-cache_home = os.environ.get(
-    "XDG_CACHE_HOME",
-    os.path.join(os.path.expanduser("~"), ".cache"),
-)
-SOCKET_PATH = os.environ.get(
-    "CLEARTOUCHD_SOCKET",
-    os.path.join(cache_home, "cleartouchd.sock"),
-)
+def socket_path() -> str:
+    configured = os.environ.get("MULTIPADD_SOCKET") or os.environ.get(
+        "CLEARTOUCHD_SOCKET"
+    )
+    if configured:
+        return os.path.expandvars(os.path.expanduser(configured))
+
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime_dir:
+        return os.path.join(runtime_dir, "multipadd.sock")
+    return os.path.expanduser("~/.cache/multipadd.sock")
+
+
+SOCKET_PATH = socket_path()
 
 while True:
     try:
