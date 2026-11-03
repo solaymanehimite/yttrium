@@ -590,10 +590,63 @@ PanelWindow {
                     id: appListView
                     anchors.fill: parent
                     clip: true
-                    model: notch.launcherEntries
+                    model: ScriptModel {
+                        values: notch.launcherEntries
+                        onValuesChanged: notch.selectedIndex = 0
+                    }
                     currentIndex: notch.selectedIndex
                     cacheBuffer: 72
                     boundsBehavior: Flickable.StopAtBounds
+                    // Animate filtering like a stack of results: matching rows
+                    // slide into their new positions while removed rows shrink away.
+                    add: Transition {
+                        ParallelAnimation {
+                            NumberAnimation {
+                                property: "opacity"
+                                from: 0.0
+                                to: 1.0
+                                duration: 110
+                                easing.type: Easing.OutCubic
+                            }
+                            NumberAnimation {
+                                property: "yScale"
+                                from: 0.7
+                                to: 1.0
+                                duration: 260
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                    }
+                    remove: Transition {
+                        ParallelAnimation {
+                            NumberAnimation {
+                                property: "opacity"
+                                to: 0.0
+                                duration: 100
+                                easing.type: Easing.InCubic
+                            }
+                            NumberAnimation {
+                                property: "yScale"
+                                to: 0.0
+                                duration: 260
+                                easing.type: Easing.InCubic
+                            }
+                        }
+                    }
+                    addDisplaced: Transition {
+                        NumberAnimation {
+                            property: "y"
+                            duration: 260
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                    displaced: Transition {
+                        NumberAnimation {
+                            property: "y"
+                            duration: 260
+                            easing.type: Easing.OutCubic
+                        }
+                    }
                     // Preserve the same 12px inset after the final row both
                     // in short lists and when the list becomes scrollable.
                     footer: Item {
@@ -602,10 +655,19 @@ PanelWindow {
                     }
 
                     delegate: Rectangle {
+                            id: delegateRoot
                             required property var modelData
                             required property int index
                             width: appListView.width
                             height: 36
+                            opacity: 1
+                            property real yScale: 1
+                            transform: Scale {
+                                origin.x: delegateRoot.width / 2
+                                origin.y: delegateRoot.height / 2
+                                xScale: 1
+                                yScale: delegateRoot.yScale
+                            }
                             // Keep the highlight concentric with the inset menu edge.
                             radius: Math.min(height / 2, notch.menuCornerRadius - 12)
                             color: index === notch.selectedIndex || activeFocus
