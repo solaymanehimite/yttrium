@@ -75,7 +75,7 @@ PanelWindow {
     property int wallpaperIndex: 0
     property bool modeTransitioning: false
     readonly property int menuWidth: Math.round(
-        (launcherMode === "wallpapers" ? 640 : 380) * Config.uiScale)
+        (launcherMode === "wallpapers" ? 640 : 320) * Config.uiScale)
     readonly property bool actionSearch: notch.searchQuery.startsWith(">")
     readonly property bool calculatorActive: Calculator.active
         && Calculator.query === notch.searchQuery.trim()
@@ -472,12 +472,21 @@ PanelWindow {
         color: "transparent"
         border.width: 0
         gradient: Gradient {
-            GradientStop { position: 0.0; color: Theme.notchGradientTop }
-            GradientStop { position: 0.72; color: Theme.notchGradientMid }
-            GradientStop { position: 1.0; color: Theme.notchGradientBottom }
+            GradientStop {
+                position: 0.0
+                color: Qt.lighter(Theme.notchGradientTop, 1.08)
+            }
+            GradientStop {
+                position: 0.72
+                color: Qt.lighter(Theme.notchGradientMid, 1.04)
+            }
+            GradientStop {
+                position: 1.0
+                color: Theme.notchGradientBottom
+            }
         }
         clip: true
-        opacity: 1
+        opacity: 0.95
 
         Behavior on height {
             SpringAnimation {
