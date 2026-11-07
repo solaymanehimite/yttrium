@@ -473,21 +473,14 @@ PanelWindow {
                 position: 0.0
                 color: {
                     const c = Qt.lighter(Theme.notchGradientTop, 1.08);
-                    return Qt.rgba(c.r, c.g, c.b, 0.97);
-                }
-            }
-            GradientStop {
-                position: 0.72
-                color: {
-                    const c = Qt.lighter(Theme.notchGradientMid, 1.04);
-                    return Qt.rgba(c.r, c.g, c.b, 0.84);
+                    return Qt.rgba(c.r, c.g, c.b, 0.90);
                 }
             }
             GradientStop {
                 position: 1.0
                 color: {
                     const c = Theme.notchGradientBottom;
-                    return Qt.rgba(c.r, c.g, c.b, 0.70);
+                    return Qt.rgba(c.r, c.g, c.b, 0.90);
                 }
             }
         }
