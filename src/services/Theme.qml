@@ -87,10 +87,10 @@ Singleton {
     readonly property color osdTrack: "#3a3a3a"
     readonly property color selection: "#557aa7"
     readonly property color batteryTrack: "#707070"
-    // Use the midpoint between the Matugen surface and black as the notch
-    // tint. Keep the lower gradient dense enough for a solid dark material.
-    readonly property color notchTint: Qt.rgba(matugenSurface.r * 0.5,
-        matugenSurface.g * 0.5, matugenSurface.b * 0.5, 1.0)
+    // Blend a small amount of the Matugen surface into black so the notch
+    // stays dark while picking up the wallpaper's color temperature.
+    readonly property color notchTint: Qt.rgba(matugenSurface.r * 0.75,
+        matugenSurface.g * 0.75, matugenSurface.b * 0.75, 1.0)
     readonly property color notchGradientTop: notchTint
     readonly property color notchGradientMid: Qt.rgba(notchTint.r,
         notchTint.g, notchTint.b, 0.98)
