@@ -46,27 +46,40 @@ PanelWindow {
     }
 
     screen: bar.screen
-    // Keep the full-screen layer alive while idle. Recreating it on each OSD
-    // or launcher transition causes visible stalls.
     visible: true
     color: "transparent"
 
-    anchors {
-        top: true
-        bottom: true
-        left: true
-        right: true
-    }
+    // Keep the window geometry still throughout both menu modes and their
+    // transitions. The blurred region still follows the visible notch only.
+    anchors.top: true
+    implicitWidth: Math.ceil(640 * Config.uiScale + 36)
+    implicitHeight: Math.ceil(notch.centeredTopPadding
+        + Math.max(392, Math.round(250 * Config.uiScale)) + 16)
 
-    // The notch must sit above application windows for the compositor to blur
-    // them behind the translucent surface, not just the wallpaper.
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: menuOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.namespace: "quickshell-notch-launcher"
-    // Only menus and transient OSDs claim input above the desktop.
-    mask: Region {
-        item: notch.menuOpen || notch.menuClosing ? notch.contentItem : surface
+    BackgroundEffect.blurRegion: Region {
+        item: notch.menuMaterialActive ? surface : null
+        radius: Math.round(surface.radius)
+    }
+    mask: Region { item: surface }
+
+    // Outside-click dismissal uses an unblurred layer below the notch.
+    PanelWindow {
+        screen: notch.screen
+        visible: notch.menuOpen
+        color: "transparent"
+        anchors { top: true; bottom: true; left: true; right: true }
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        WlrLayershell.exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.namespace: "quickshell-notch-dismiss"
+        MouseArea {
+            anchors.fill: parent
+            onClicked: notch.toggleMenu()
+        }
     }
 
     property string searchQuery: ""
@@ -126,12 +139,7 @@ PanelWindow {
         ? 34 : 24
     property real animatedMenuRadius: menuCornerRadius
     Behavior on animatedMenuRadius {
-        SpringAnimation {
-            spring: 9
-            damping: 0.75
-            mass: 1.6
-            epsilon: 0.01
-        }
+        NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
     }
     // Launcher rows and insets have fixed pixel heights. Scaling the entire
     // menu after calculating them accumulated spare space as result counts
@@ -146,6 +154,7 @@ PanelWindow {
     property bool menuOpen: false
     property bool menuOpening: false
     property bool menuClosing: false
+    readonly property bool menuMaterialActive: menuOpen || menuOpening || menuClosing
     property bool morphingFromOsd: false
     property bool osdTransitioning: false
     readonly property bool osdState: displaying || osdActive || osdClosing
@@ -339,7 +348,7 @@ PanelWindow {
 
     Timer {
         id: modeAnimationTimer
-        interval: 220
+        interval: 340
         onTriggered: notch.modeTransitioning = false
     }
 
@@ -395,7 +404,7 @@ PanelWindow {
 
     Timer {
         id: menuAnimationTimer
-        interval: 220
+        interval: 340
         onTriggered: {
             notch.menuOpening = false;
             notch.menuClosing = false;
@@ -430,12 +439,6 @@ PanelWindow {
         function onBrightnessChanged() { notch.show("brightness"); }
     }
 
-    MouseArea {
-        anchors.fill: parent
-        visible: notch.menuOpen || notch.menuClosing
-        onClicked: notch.toggleMenu()
-    }
-
     Rectangle {
         id: surface
         anchors.horizontalCenter: parent.horizontalCenter
@@ -454,14 +457,8 @@ PanelWindow {
             ? notch.menuWidth
             : (notch.osdLayoutState ? 280 : Math.max(132,
                 Math.round(idleClock.implicitWidth + 32)))
-        // Keep menu transitions springing instead of snapping between widths.
         Behavior on width {
-            SpringAnimation {
-                spring: 9
-                damping: 0.75
-                mass: 1.6
-                epsilon: 0.01
-            }
+            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
         }
         height: notch.menuOpen || notch.menuOpening
             ? notch.menuHeight
@@ -474,27 +471,31 @@ PanelWindow {
         gradient: Gradient {
             GradientStop {
                 position: 0.0
-                color: Qt.lighter(Theme.notchGradientTop, 1.08)
+                color: {
+                    const c = Qt.lighter(Theme.notchGradientTop, 1.08);
+                    return Qt.rgba(c.r, c.g, c.b, 0.97);
+                }
             }
             GradientStop {
                 position: 0.72
-                color: Qt.lighter(Theme.notchGradientMid, 1.04)
+                color: {
+                    const c = Qt.lighter(Theme.notchGradientMid, 1.04);
+                    return Qt.rgba(c.r, c.g, c.b, 0.84);
+                }
             }
             GradientStop {
                 position: 1.0
-                color: Theme.notchGradientBottom
+                color: {
+                    const c = Theme.notchGradientBottom;
+                    return Qt.rgba(c.r, c.g, c.b, 0.70);
+                }
             }
         }
         clip: true
-        opacity: 0.95
+        opacity: 1
 
         Behavior on height {
-            SpringAnimation {
-                spring: 9
-                damping: 0.75
-                mass: 1.6
-                epsilon: 0.01
-            }
+            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
         }
 
         Column {
@@ -717,8 +718,10 @@ PanelWindow {
 
         Item {
             id: wallpaperPanel
-            anchors.fill: parent
-            anchors.margins: 12
+            // Avoid recalculating the PathView layout on every morph frame.
+            width: Math.round(640 * Config.uiScale) - 24
+            height: Math.round(250 * Config.uiScale) - 24
+            anchors.centerIn: parent
             readonly property bool active: notch.menuOpen && notch.launcherMode === "wallpapers"
             visible: active || opacity > 0
             enabled: active
@@ -726,20 +729,10 @@ PanelWindow {
             opacity: active ? 1 : 0
             scale: active ? 1 : 0.7
             Behavior on opacity {
-                SpringAnimation {
-                    spring: 11
-                    damping: 0.75
-                    mass: 1.6
-                    epsilon: 0.01
-                }
+                NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
             }
             Behavior on scale {
-                SpringAnimation {
-                    spring: 14
-                    damping: 0.72
-                    mass: 1.4
-                    epsilon: 0.01
-                }
+                NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
             }
 
             function move(delta) {

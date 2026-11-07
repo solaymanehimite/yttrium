@@ -36,6 +36,10 @@ PanelWindow {
         id: notch
     }
 
+    WorkspaceStrip {
+        hostWindow: bar
+    }
+
     RightIndicators {
         barWindow: bar
     }
