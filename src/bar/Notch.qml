@@ -131,7 +131,7 @@ PanelWindow {
     readonly property int osdContentInset: 14
     // All states share the mini notch's centered vertical position. Larger
     // menus keep that same top edge instead of shifting between states.
-    readonly property int floatingTopPadding: bar.niriGap
+    readonly property int floatingTopPadding: bar.barGap
     readonly property int centeredTopPadding: floatingTopPadding
         + (bar.reservedHeight - osdHeight) / 2
     readonly property int osdCornerRadius: 999
@@ -253,8 +253,8 @@ PanelWindow {
         }
     }
 
-    // Avoid starting the `qs` CLI for every keypress. Niri writes to this
-    // long-lived FIFO, and the listener forwards the event directly here.
+    // Avoid starting the `qs` CLI for every keypress. The listener writes to
+    // this long-lived FIFO and forwards the event directly here.
     Process {
         id: toggleListener
         command: ["python3", Quickshell.shellDir + "/scripts/notch-toggle-listener.py"]

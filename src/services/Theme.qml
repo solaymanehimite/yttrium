@@ -27,6 +27,9 @@ Singleton {
         path: Quickshell.env("HOME") + "/.config/gtk-3.0/colors.css"
         watchChanges: true
         printErrors: false
+        // Matugen replaces this file when the wallpaper changes. Reload on
+        // the replacement event so the notch palette is never left stale.
+        onFileChanged: reload()
         onLoaded: Theme.updateMatugenPalette(text())
     }
 
@@ -87,10 +90,12 @@ Singleton {
     readonly property color osdTrack: "#3a3a3a"
     readonly property color selection: "#557aa7"
     readonly property color batteryTrack: "#707070"
-    // Blend a small amount of the Matugen surface into black so the notch
-    // stays dark while picking up the wallpaper's color temperature.
-    readonly property color notchTint: Qt.rgba(matugenSurface.r * 0.75,
-        matugenSurface.g * 0.75, matugenSurface.b * 0.75, 1.0)
+    // Keep the material dark, but derive its hue from Matugen's accent so
+    // wallpaper changes produce a visible notch color change.
+    readonly property color notchTint: Qt.rgba(
+        Math.min(1.0, matugenSurface.r * 0.55 + matugenAccent.r * 0.05),
+        Math.min(1.0, matugenSurface.g * 0.55 + matugenAccent.g * 0.05),
+        Math.min(1.0, matugenSurface.b * 0.55 + matugenAccent.b * 0.05), 1.0)
     readonly property color notchGradientTop: notchTint
     readonly property color notchGradientMid: Qt.rgba(notchTint.r,
         notchTint.g, notchTint.b, 0.98)

@@ -1,7 +1,7 @@
 pragma Singleton
 
 import Quickshell
-import Quickshell.Io
+import Quickshell.Hyprland
 import QtQuick
 
 Singleton {
@@ -11,76 +11,49 @@ Singleton {
     property var windows: []
     property var focusedWindowId: null
 
-    function consume(line) {
-        let event;
-        try {
-            event = JSON.parse(line);
-        } catch (error) {
-            return;
-        }
+    function refresh() {
+        const workspaceObjects = Hyprland.workspaces.values || [];
+        workspaces = workspaceObjects
+            .filter(ws => ws.id > 0)
+            .map(ws => ({
+                id: ws.id,
+                idx: ws.id,
+                name: ws.name,
+                output: ws.monitor ? ws.monitor.name : "",
+                is_active: ws.active,
+                is_focused: ws.focused,
+                is_urgent: ws.urgent
+            }))
+            .sort((a, b) => a.idx - b.idx);
 
-        if (event.WorkspacesChanged) {
-            workspaces = event.WorkspacesChanged.workspaces;
-        } else if (event.WorkspaceActivated) {
-            const change = event.WorkspaceActivated;
-            const current = workspaces.find(ws => ws.id === change.id);
-            workspaces = workspaces.map(ws => Object.assign({}, ws, {
-                is_active: ws.id === change.id ? true
-                    : (current && ws.output === current.output ? false : ws.is_active),
-                is_focused: change.focused ? ws.id === change.id : ws.is_focused
-            }));
-        } else if (event.WorkspaceActiveWindowChanged) {
-            const change = event.WorkspaceActiveWindowChanged;
-            workspaces = workspaces.map(ws => ws.id === change.workspace_id
-                ? Object.assign({}, ws, { active_window_id: change.active_window_id }) : ws);
-        } else if (event.WorkspaceUrgencyChanged) {
-            const change = event.WorkspaceUrgencyChanged;
-            workspaces = workspaces.map(ws => ws.id === change.id
-                ? Object.assign({}, ws, { is_urgent: change.urgent }) : ws);
-        } else if (event.WindowsChanged) {
-            windows = event.WindowsChanged.windows;
-            const focused = windows.find(window => window.is_focused);
-            focusedWindowId = focused ? focused.id : null;
-        } else if (event.WindowOpenedOrChanged) {
-            const window = event.WindowOpenedOrChanged.window;
-            const index = windows.findIndex(item => item.id === window.id);
-            if (index < 0) {
-                windows = windows.concat([window]);
-            } else {
-                const next = windows.slice();
-                next[index] = window;
-                windows = next;
-            }
-            if (window.is_focused)
-                focusedWindowId = window.id;
-        } else if (event.WindowFocusChanged) {
-            focusedWindowId = event.WindowFocusChanged.id;
-        } else if (event.WindowClosed) {
-            const id = event.WindowClosed.id;
-            windows = windows.filter(window => window.id !== id);
-            if (focusedWindowId === id)
-                focusedWindowId = null;
-        }
+        const toplevelObjects = Hyprland.toplevels.values || [];
+        windows = toplevelObjects.map(window => {
+            const raw = window.lastIpcObject || {};
+            const workspace = window.workspace;
+            return {
+                id: window.address,
+                app_id: raw.class || raw.initialClass || "",
+                workspace_id: workspace ? workspace.id : -1,
+                is_focused: window.activated,
+                title: window.title
+            };
+        }).filter(window => window.workspace_id > 0);
+
+        const focused = windows.find(window => window.is_focused);
+        focusedWindowId = focused ? focused.id : null;
     }
 
     function focus(index) {
-        Quickshell.execDetached(["niri", "msg", "action", "focus-workspace", String(index)]);
+        Hyprland.dispatch("workspace " + String(index));
+        refresh();
     }
 
-    Process {
-        id: events
-        command: ["niri", "msg", "-j", "event-stream"]
-        running: true
-        stdout: SplitParser {
-            onRead: data => service.consume(data)
-        }
-        onExited: reconnect.start()
-    }
+    Component.onCompleted: refresh()
 
     Timer {
-        id: reconnect
-        interval: 1000
-        onTriggered: events.running = true
+        interval: 250
+        running: true
+        repeat: true
+        onTriggered: service.refresh()
     }
-
 }
